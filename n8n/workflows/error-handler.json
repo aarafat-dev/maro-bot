@@ -1,0 +1,188 @@
+{
+  "name": "WhatsApp Store Bot - Error Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -520,
+        0
+      ],
+      "id": "8c6f4d20-0001-4c22-9001-000000000001",
+      "name": "Workflow Error Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $json || {};\n\nfunction findField(value, names, depth = 0) {\n  if (!value || depth > 8) return null;\n  if (Array.isArray(value)) {\n    for (const entry of value) {\n      const found = findField(entry, names, depth + 1);\n      if (found) return found;\n    }\n    return null;\n  }\n  if (typeof value !== 'object') return null;\n  for (const [key, child] of Object.entries(value)) {\n    if (names.includes(key) && (typeof child === 'string' || typeof child === 'number')) return String(child);\n  }\n  for (const child of Object.values(value)) {\n    const found = findField(child, names, depth + 1);\n    if (found) return found;\n  }\n  return null;\n}\n\nconst error = event.execution?.error || event.error || {};\nconst failedNode = String(event.execution?.lastNodeExecuted || error.node?.name || 'unknown');\nconst workflowName = String(event.workflow?.name || event.execution?.workflowData?.name || 'unknown');\nconst phoneNumber = findField(event.execution?.data || event, ['phone_number', 'customer_number', 'wa_id']);\nconst language = findField(event.execution?.data || event, ['language']) || 'unknown';\nconst errorMessage = String(error.message || event.message || 'Unknown workflow error').slice(0, 1000);\n\nconst logEntry = {\n  severity: 'error',\n  workflow_name: workflowName,\n  failed_node: failedNode,\n  customer_number: phoneNumber,\n  timestamp: new Date().toISOString(),\n  error_message: errorMessage,\n  execution_id: String(event.execution?.id || ''),\n};\n\nconsole.error('[whatsapp-store-bot]', JSON.stringify(logEntry));\n\nreturn [{\n  json: {\n    ...logEntry,\n    language,\n    can_notify_customer: Boolean(phoneNumber) && failedNode !== 'Send WhatsApp Reply',\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -280,
+        0
+      ],
+      "id": "8c6f4d20-0002-4c22-9001-000000000002",
+      "name": "Create Safe Error Log"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "boolean-condition",
+              "leftValue": "={{ $json.can_notify_customer }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -40,
+        0
+      ],
+      "id": "8c6f4d20-0003-4c22-9001-000000000003",
+      "name": "Customer Number Available?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const language = ['darija', 'french', 'english'].includes($json.language) ? $json.language : 'darija';\nconst replies = {\n  darija: 'Sme7 lina, kayn mochkil مؤقت. L\\'équipe dyal lma7al ghadi t3awnek قريباً.',\n  french: \"Désolé, un problème temporaire est survenu. L'équipe du magasin vous aidera sous peu.\",\n  english: 'Sorry, there was a temporary problem. The store team will help you shortly.',\n};\nconst graphVersion = String($env.WHATSAPP_GRAPH_VERSION || 'v23.0');\nconst phoneNumberId = String($env.WHATSAPP_PHONE_NUMBER_ID || '');\n\nreturn [{\n  json: {\n    ...$json,\n    send_url: 'https://graph.facebook.com/' + graphVersion + '/' + phoneNumberId + '/messages',\n    send_body: {\n      messaging_product: 'whatsapp',\n      recipient_type: 'individual',\n      to: $json.customer_number,\n      type: 'text',\n      text: { preview_url: false, body: replies[language] },\n    },\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        -80
+      ],
+      "id": "8c6f4d20-0004-4c22-9001-000000000004",
+      "name": "Prepare Safe Customer Fallback"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.send_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.WHATSAPP_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($json.send_body) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        -80
+      ],
+      "id": "8c6f4d20-0005-4c22-9001-000000000005",
+      "name": "Send WhatsApp Error Fallback",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        200,
+        80
+      ],
+      "id": "8c6f4d20-0006-4c22-9001-000000000006",
+      "name": "Log Only - No Customer Context"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Workflow Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Create Safe Error Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Safe Error Log": {
+      "main": [
+        [
+          {
+            "node": "Customer Number Available?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Customer Number Available?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Safe Customer Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Only - No Customer Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Safe Customer Fallback": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp Error Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "timezone": "Africa/Casablanca",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "98e76d13-cdb1-4703-89b8-88e1f6ac7002",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

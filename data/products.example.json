@@ -1,0 +1,59 @@
+[
+  {
+    "id": "glasses-boys-jagwar",
+    "name": "Jagwar Glasses",
+    "category": "glasses",
+    "audience": "boys",
+    "price": 90,
+    "currency": "MAD",
+    "stock": null,
+    "colors": [],
+    "compatible_devices": [],
+    "aliases": ["Jagwar"],
+    "description": "Glasses model for boys",
+    "product_url": ""
+  },
+  {
+    "id": "glasses-boys-zyech",
+    "name": "Zyech Glasses",
+    "category": "glasses",
+    "audience": "boys",
+    "price": 90,
+    "currency": "MAD",
+    "stock": null,
+    "colors": [],
+    "compatible_devices": [],
+    "aliases": ["Zyech"],
+    "description": "Glasses model for boys",
+    "product_url": ""
+  },
+  {
+    "id": "glasses-boys-summer",
+    "name": "Summer Glasses",
+    "category": "glasses",
+    "audience": "boys",
+    "price": 90,
+    "currency": "MAD",
+    "stock": null,
+    "colors": [],
+    "compatible_devices": [],
+    "aliases": ["Summer"],
+    "description": "Glasses model for boys",
+    "product_url": ""
+  },
+  {
+    "id": "glasses-girls-miw-miw",
+    "name": "Miw Miw Glasses",
+    "category": "glasses",
+    "audience": "girls",
+    "price": 90,
+    "currency": "MAD",
+    "stock": null,
+    "colors": [],
+    "compatible_devices": [],
+    "aliases": ["Miw Miw"],
+    "description": "Glasses model for girls",
+    "product_url": ""
+  }
+]
+

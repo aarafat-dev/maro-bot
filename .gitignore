@@ -1,0 +1,25 @@
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Client-specific store data (commit only the .example.json templates)
+data/products.json
+data/faq.json
+data/store-config.json
+
+# n8n state, logs, and local exports
+.n8n/
+n8n_data/
+*.log
+
+# Editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Test artefacts
+tmp/
+coverage/
+

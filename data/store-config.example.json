@@ -1,0 +1,48 @@
+{
+  "store_name": "Demo Store",
+  "country": "Morocco",
+  "languages": [
+    "darija",
+    "french",
+    "english"
+  ],
+  "default_language": "darija",
+  "currency": "MAD",
+  "cod_enabled": true,
+  "inspect_before_payment": true,
+  "pricing": {
+    "single_quantity": 1,
+    "single_price_mad": 90,
+    "bundle_quantity": 2,
+    "bundle_price_mad": 150
+  },
+  "delivery": {
+    "areas": [
+      "Morocco"
+    ],
+    "price_mad": 29,
+    "estimated_days": "less than 24 hours",
+    "estimated_text": {
+      "darija": "فأقل من 24 ساعة",
+      "french": "en moins de 24 heures",
+      "english": "in less than 24 hours"
+    }
+  },
+  "exchange": {
+    "enabled": true,
+    "condition": "Exchange is available if the customer does not like the glasses"
+  },
+  "opening_hours": null,
+  "human_support_number": "+212600000000",
+  "reply_max_characters": 700,
+  "handoff_messages": {
+    "darija": "Ma متأكدش 100% mn had lma3louma. Ghadi n7awwel talab dyalk l'équipe dyal lma7al باش يعاونوك.",
+    "french": "Je ne suis pas complètement sûr de cette information. Je transfère votre demande à l'équipe du magasin.",
+    "english": "I'm not completely sure about that. I'll transfer this request to the store team."
+  },
+  "error_messages": {
+    "darija": "Sme7 lina, kayn mochkil مؤقت. L'équipe dyal lma7al ghadi t3awnek قريباً.",
+    "french": "Désolé, un problème temporaire est survenu. L'équipe du magasin vous aidera sous peu.",
+    "english": "Sorry, there was a temporary problem. The store team will help you shortly."
+  }
+}
