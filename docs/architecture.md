@@ -32,6 +32,8 @@ The GET verification webhook and protected clear-handoff webhook remain separate
 
 The deterministic router is the policy boundary. Clearly irrelevant or adversarial input is answered there, before a Workers AI request can be built.
 
+Its internal classification is three-way: `RELEVANT_UNDERSTOOD` for deterministic answers, `RELEVANT_UNCERTAIN` for store-related questions that need clarification or bounded interpretation, and `OUT_OF_SCOPE` for static rejection. A failed product match alone is never sufficient to mark a shopping/customer-service message out of scope.
+
 ## Deterministic routing
 
 The router performs, in order:
@@ -102,12 +104,13 @@ Workflow static data stores:
 
 ```text
 sessions[phone_number]
-  language
+  preferred_language
   last_intent
   last_product_id
   last_product_at
-  last_seen
-  human_handoff
+  last_requested_color
+  handoff_status
+  last_activity_at
 
 processed_message_ids[message_id]
   received_at / processed_at
@@ -117,6 +120,8 @@ processed_message_ids[message_id]
 ```
 
 Product context is accepted for 24 hours, processed IDs expire after seven days, and inactive sessions expire after 90 days. The workflow does not keep or send an unbounded conversation transcript.
+
+Legacy compatibility fields (`language`, `last_seen`, and `human_handoff`) remain stored while the refined fields above are used for routing. Catalog presence and inventory are separate: `catalogued=true` means the product belongs to the store, while `stock_status=unknown` requires staff confirmation and must never be presented as live stock.
 
 Static data is appropriate for one low-volume active workflow. It is not an atomic deduplication store for concurrent queue-mode workers. Before scaling, use a database uniqueness constraint on `(store_id, message_id)` and a bounded session record keyed by `(store_id, phone_number)`.
 

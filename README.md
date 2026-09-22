@@ -152,20 +152,31 @@ Edit `data/products.json`; keep `data/products.example.json` aligned for tests a
 
 Matching lowercases text, removes basic punctuation/diacritics, collapses whitespace, and compares product names and aliases. Do not add speculative colors, materials, stock, promotions, or sizing advice. When more than one product is plausibly named and the message is not a comparison, the bot asks which product the customer means.
 
+The store scope is four products, but the repository currently contains confirmed structured facts for only two: `nike-double-face-jacket` and `cotton-montoni-tracksuit`. Products 3 and 4 are intentionally absent until their identities and facts are supplied; the bot must not manufacture placeholder catalogue items. Both confirmed records distinguish `catalogued: true` from `stock_status: "unknown"` and list Black/White variants.
+
+The router emits one of three internal outcomes:
+
+- `RELEVANT_UNDERSTOOD`: answer or clarify deterministically;
+- `RELEVANT_UNCERTAIN`: store-related interpretation may pass the AI gate;
+- `OUT_OF_SCOPE`: return the static store-only response with no AI call.
+
+Color aliases are normalized deterministically to `Black` or `White`. Unsupported colors retain the matched/current product and return its catalogued colors without invoking AI.
+
 ## Conversation context
 
 The workflow stores only lightweight structured state per phone number:
 
 ```text
-language
+preferred_language
 last_intent
 last_product_id
 last_product_at
-last_seen
-human_handoff
+last_requested_color
+handoff_status
+last_activity_at
 ```
 
-`last_product_id` expires for routing after 24 hours. Sessions are pruned after 90 days and processed message IDs after seven days. Customer message history is not forwarded to AI or retained as an unbounded transcript. This lets `taman nike` followed by `w tailles?` resolve to the Nike product.
+Compatibility fields `language`, `last_seen`, and `human_handoff` remain present for existing workflow state. `last_product_id` and its color context expire for routing after 24 hours. Sessions are pruned after 90 days and processed message IDs after seven days. Customer message history is not forwarded to AI or retained as an unbounded transcript. This lets `taman nike` followed by `w tailles?`, or `survette noir` followed by `w lbyed?`, resolve consistently.
 
 ## Incoming images (V1)
 
@@ -189,7 +200,7 @@ All routing and provider-failure tests are offline and require no credentials:
 npm test
 ```
 
-The suite regenerates both workflow exports, validates every embedded Code node, checks for committed secret patterns, and exercises the fourteen required deterministic/AI scenarios, including image handling, follow-up product context, 429, and 5xx responses.
+The suite regenerates both workflow exports, validates every embedded Code node, checks for committed secret patterns, and exercises all 22 routing scenarios, including language persistence, colors, images, follow-up product context, the AI gate, 429, and 5xx responses.
 
 Run only routing scenarios:
 

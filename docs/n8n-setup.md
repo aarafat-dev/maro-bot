@@ -87,7 +87,7 @@ Use the production admin webhook so the update runs inside the same workflow sta
 scripts/clear-handoff.sh 2126XXXXXXXX https://bot.example.com
 ```
 
-The endpoint is `POST /webhook/whatsapp/admin/clear-handoff`, requires `X-Handoff-Admin-Token`, normalizes the phone to digits, and changes only `human_handoff`. Rotate the token if it is exposed.
+The endpoint is `POST /webhook/whatsapp/admin/clear-handoff`, requires `X-Handoff-Admin-Token`, normalizes the phone to digits, and clears both compatibility field `human_handoff` and `handoff_status`. Rotate the token if it is exposed.
 
 ## Error workflow
 

@@ -17,17 +17,31 @@ for (const path of jsonFiles) assert.doesNotThrow(() => json(path), `${path} mus
 
 for (const path of ['data/products.example.json', 'data/products.json']) {
   const products = json(path);
-  assert.equal(products.length, 2, `${path} must contain only the two current products`);
+  assert.equal(products.length, 2, `${path} currently has exactly two confirmed products; unconfirmed products must not be fabricated`);
+  assert.ok(products.length <= 4, `${path} must never exceed this store's four-product scope`);
   assert.deepEqual(products.map((product) => product.id), ['nike-double-face-jacket', 'cotton-montoni-tracksuit']);
   for (const product of products) {
-    for (const key of ['id', 'name', 'category', 'price', 'currency', 'stock', 'sizes', 'aliases']) {
+    for (const key of ['id', 'name', 'category', 'price', 'currency', 'catalogued', 'stock_status', 'stock', 'sizes', 'colors', 'features', 'aliases']) {
       assert.ok(Object.hasOwn(product, key), `${product.id} is missing ${key}`);
     }
+    assert.equal(product.catalogued, true);
+    assert.equal(product.stock_status, 'unknown');
+    assert.equal(product.stock, null);
     assert.deepEqual(product.sizes, ['S', 'M', 'L', 'XL']);
+    assert.deepEqual(product.colors, ['Black', 'White']);
     assert.ok(product.aliases.length >= 5, `${product.id} needs data-driven multilingual aliases`);
     assert.equal(product.delivery?.free, true);
     assert.ok(Number.isFinite(product.price) && product.price >= 0);
   }
+}
+const normalizedProducts = json('data/products.example.json');
+const nike = normalizedProducts.find((product) => product.id === 'nike-double-face-jacket');
+const montoni = normalizedProducts.find((product) => product.id === 'cotton-montoni-tracksuit');
+for (const alias of ['nike', 'jaket nike', 'jacket nike', 'veste nike', 'nike jacket', 'nike double face', 'double face', 'jacket double face', 'جاكيط نايك', 'جاكيت نايك', 'نايك']) {
+  assert.ok(nike.aliases.includes(alias), `Nike is missing alias: ${alias}`);
+}
+for (const alias of ['survette', 'survet', 'survêtement', 'survetement', 'survette noir', 'survette blanc', 'survet noir', 'survet blanc', 'ensemble', 'ensemble noir', 'ensemble blanc', 'tracksuit', 'jogging', 'coton', 'montoni', 'top coton', 'توب قطن', 'مونطوني', 'سورفيت', 'سورفيت نوار']) {
+  assert.ok(montoni.aliases.includes(alias), `Montoni is missing alias: ${alias}`);
 }
 
 const config = json('data/store-config.example.json');
@@ -82,10 +96,24 @@ assert.equal(main.connections['AI Required?'].main[1][0].node, 'Save Conversatio
 assert.equal(main.connections['AI Required?'].main[0][0].node, 'Build Cloudflare AI Request');
 assert.equal(main.connections['Validate Cloudflare AI Reply'].main[0][0].node, 'Save Conversation and Handoff State');
 
+const routerCode = main.nodes.find((item) => item.name === 'Deterministic Security and Sales Router').parameters.jsCode;
+for (const intent of ['GREETING', 'PRICE', 'SIZE', 'COLOR', 'DELIVERY', 'PAYMENT', 'AVAILABILITY', 'PRODUCT_INFO', 'QUALITY', 'MATERIAL', 'ORDER', 'PRODUCT_COMPARISON', 'HUMAN_HANDOFF', 'UNKNOWN_STORE_QUERY', 'OUT_OF_SCOPE']) {
+  assert.match(routerCode, new RegExp(`['\"]${intent}['\"]`), `router must support ${intent}`);
+}
+for (const field of ['routing_outcome', 'requested_color', 'preferred_language', 'response_source']) {
+  assert.match(routerCode, new RegExp(field), `router must emit ${field}`);
+}
+const loadSessionCode = main.nodes.find((item) => item.name === 'Load Customer Session and Deduplicate').parameters.jsCode;
+const saveSessionCode = main.nodes.find((item) => item.name === 'Save Conversation and Handoff State').parameters.jsCode;
+for (const field of ['last_product_id', 'last_intent', 'last_requested_color', 'preferred_language', 'handoff_status', 'last_activity_at']) {
+  assert.match(loadSessionCode + saveSessionCode, new RegExp(field), `session state must include ${field}`);
+}
+
 const aiNode = main.nodes.find((item) => item.name === 'Call Cloudflare Workers AI');
 assert.equal(aiNode.parameters.url, '={{ $json.ai_endpoint }}');
 assert.equal(aiNode.retryOnFail, true);
 assert.equal(aiNode.maxTries, 2);
+assert.ok(aiNode.maxTries <= 2, 'Cloudflare calls must have a finite, tightly bounded retry count');
 assert.equal(aiNode.parameters.options.timeout, 20000);
 const authorization = aiNode.parameters.headerParameters.parameters.find((header) => header.name === 'Authorization')?.value || '';
 assert.match(authorization, /CLOUDFLARE_API_TOKEN/);

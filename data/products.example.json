@@ -5,12 +5,13 @@
     "category": "clothing",
     "price": 249,
     "currency": "MAD",
+    "catalogued": true,
+    "stock_status": "unknown",
     "stock": null,
     "sizes": ["S", "M", "L", "XL"],
-    "colors": [],
+    "colors": ["Black", "White"],
     "material": null,
-    "characteristics": [
-      "Nike-style jacket",
+    "features": [
       "double face / reversible",
       "clothing product"
     ],
@@ -24,8 +25,10 @@
       "jaket nike",
       "jacket nike",
       "veste nike",
+      "nike jacket",
       "nike double face",
       "double face",
+      "jacket double face",
       "جاكيط نايك",
       "جاكيت نايك",
       "نايك"
@@ -37,11 +40,13 @@
     "category": "clothing",
     "price": 219,
     "currency": "MAD",
+    "catalogued": true,
+    "stock_status": "unknown",
     "stock": null,
     "sizes": ["S", "M", "L", "XL"],
-    "colors": [],
+    "colors": ["Black", "White"],
     "material": "cotton",
-    "characteristics": [
+    "features": [
       "cotton",
       "good quality",
       "fabric marketed as resistant to pilling / مكيحببش"
@@ -55,16 +60,27 @@
       "description": "Customer can inspect/check the product before paying."
     },
     "aliases": [
+      "survette",
+      "survet",
       "survetement",
       "survêtement",
+      "survette noir",
+      "survette blanc",
+      "survet noir",
+      "survet blanc",
       "tracksuit",
       "ensemble",
+      "ensemble noir",
+      "ensemble blanc",
+      "jogging",
       "coton",
       "montoni",
       "top coton",
       "توب قطن",
       "مونطوني",
-      "قطن"
+      "قطن",
+      "سورفيت",
+      "سورفيت نوار"
     ]
   }
 ]
