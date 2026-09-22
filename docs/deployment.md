@@ -16,9 +16,13 @@ N8N_EDITOR_BASE_URL=https://automation.client-domain.example
 WEBHOOK_URL=https://bot.client-domain.example/
 N8N_SECURE_COOKIE=true
 VERIFY_META_SIGNATURE=true
+CLOUDFLARE_ACCOUNT_ID=YOUR_ACCOUNT_ID
+CLOUDFLARE_API_TOKEN=YOUR_SECRET_TOKEN
+CLOUDFLARE_AI_MODEL=@cf/meta/llama-3.1-8b-instruct-fp8
 ```
 
 Use separate random values for `N8N_ENCRYPTION_KEY`, `WHATSAPP_VERIFY_TOKEN`, and `HANDOFF_ADMIN_TOKEN`. The Meta App Secret is not the verify token.
+Store the Cloudflare token in the deployment secret store or an encrypted n8n credential; the placeholder above is illustrative only.
 
 ## Reverse-proxy requirements
 
@@ -44,7 +48,10 @@ The workflow immediately returns `EVENT_RECEIVED`, then continues processing, re
 - [ ] `messages` is subscribed.
 - [ ] HMAC verification is enabled and tested.
 - [ ] Long-lived Meta token works with the production Phone Number ID.
-- [ ] AI-provider key/model work and rate limits are understood.
+- [ ] Cloudflare account/model work and the token is scoped only to Workers AI on the intended account.
+- [ ] A deterministic message shows `response_source=deterministic` and makes no Workers AI request.
+- [ ] A controlled relevant comparison shows `response_source=cloudflare_ai`.
+- [ ] Simulated 429/5xx paths produce the safe fallback and handoff.
 - [ ] Error workflow is assigned to the main workflow.
 - [ ] Main workflow is active exactly once.
 - [ ] `npm test` passes from the deployed revision.
@@ -107,7 +114,8 @@ At minimum monitor:
 - container health and restart count;
 - n8n error executions;
 - Cloud API 4xx/5xx responses;
-- AI-provider errors/rate limits and fallback rate;
+- Workers AI calls, 429/5xx errors, and fallback rate;
+- deterministic-to-AI routing ratio and unexpected AI use;
 - handoff count and unresolved handoff age;
 - duplicate rate;
 - unknown/missing-product queries;

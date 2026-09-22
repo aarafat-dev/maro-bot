@@ -35,12 +35,10 @@ services:
       WHATSAPP_GRAPH_VERSION: ${WHATSAPP_GRAPH_VERSION:-v23.0}
       VERIFY_META_SIGNATURE: ${VERIFY_META_SIGNATURE:-false}
       HANDOFF_ADMIN_TOKEN: ${HANDOFF_ADMIN_TOKEN:-}
-      AI_API_KEY: ${AI_API_KEY:-}
-      AI_BASE_URL: ${AI_BASE_URL:-}
-      AI_MODEL: ${AI_MODEL:-}
-      # Legacy OpenAI variable names remain available for older deployments.
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_MODEL: ${OPENAI_MODEL:-}
+      CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:-}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+      CLOUDFLARE_AI_MODEL: ${CLOUDFLARE_AI_MODEL:-@cf/meta/llama-3.1-8b-instruct-fp8}
+      CLOUDFLARE_AI_MAX_TOKENS: ${CLOUDFLARE_AI_MAX_TOKENS:-300}
       DATABASE_URL: ${DATABASE_URL:-}
     volumes:
       - n8n_data:/home/node/.n8n

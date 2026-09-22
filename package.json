@@ -2,7 +2,7 @@
   "name": "whatsapp-store-bot",
   "version": "0.1.0",
   "private": true,
-  "description": "Reusable n8n WhatsApp Cloud API ecommerce support bot",
+  "description": "Deterministic-first n8n WhatsApp sales assistant with a Cloudflare Workers AI fallback",
   "type": "module",
   "scripts": {
     "build:workflows": "node scripts/build-workflows.mjs",
@@ -14,4 +14,3 @@
     "node": ">=20"
   }
 }
-

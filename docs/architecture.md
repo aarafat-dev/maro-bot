@@ -5,82 +5,107 @@
 ```mermaid
 flowchart TD
     WA[Meta WhatsApp Cloud API] --> W[POST webhook]
-    W --> A[Immediate 200 acknowledgment]
-    A --> V[Validate shape, phone ID, optional HMAC]
-    V --> N[Normalize supported message]
+    W --> ACK[Immediate 200 acknowledgment]
+    ACK --> V[Shape + phone ID + optional HMAC]
+    V --> N[Normalize and cap input]
     N --> D[Session + message ID deduplication]
-    D -->|handoff active or duplicate| STOP[Stop automation]
-    D -->|new message| DATA[Load read-only store JSON]
-    DATA --> C[Structured language + intent classification]
-    C --> S{Switch by intent}
-    S --> FAQ[FAQ / delivery / COD lookup]
-    S --> P[Modular product search]
-    S --> O[Order-data instructions]
-    S --> H[Human handoff]
-    FAQ --> CONTEXT[Trusted context]
-    P --> CONTEXT
-    O --> CONTEXT
-    H --> CONTEXT
-    CONTEXT --> AI[Schema-constrained reply wording]
-    AI --> GUARD[Grounding validator + deterministic fallback]
-    GUARD --> MEMORY[Save conversation and handoff state]
-    MEMORY --> SEND[Cloud API messages endpoint]
+    D -->|duplicate or handoff active| STOP[Stop automation]
+    D --> DATA[Read-only store JSON]
+    DATA --> R[Deterministic security and sales router]
+    R -->|known fact / greeting / image / rejected| SAVE[Save structured state]
+    R -->|relevant unresolved only| B[Build minimal Workers AI request]
+    B --> CF[Cloudflare Workers AI REST API]
+    CF --> G[Grounding and output validator]
+    G -->|valid| SAVE
+    G -->|429 / 5xx / invalid| H[Safe reply + handoff]
+    H --> SAVE
+    SAVE --> SEND[Meta messages endpoint]
 ```
 
-The GET verification webhook and protected clear-handoff webhook are separate branches in the same workflow. The error trigger is a separate workflow so unexpected failures cannot expose runtime details through the main webhook response.
+The GET verification webhook and protected clear-handoff webhook remain separate branches in the main workflow. Unexpected failures use the separate error-trigger workflow.
 
 ## Trust boundaries
 
-There are three data classes:
+1. **Untrusted customer data:** message text, image captions, button/list labels, headers, and profile/event metadata. Text is cleaned and capped before use. It cannot select a file, command, endpoint, credential, or model.
+2. **Trusted business data:** `products.json`, `faq.json`, and `store-config.json`, mounted at fixed read-only paths under `/store-data`.
+3. **Secrets:** Meta and Cloudflare tokens, Meta App Secret, webhook verify token, handoff token, and n8n encryption key. They come from environment variables or n8n credentials and never enter model context or ordinary logs.
 
-1. **Untrusted customer data**: message text, profile name, button/list labels, and webhook headers. Inputs are length-limited and the model is told never to obey instructions inside them.
-2. **Trusted business data**: the three JSON files mounted read-only at `/store-data`. Only client-approved values belong here.
-3. **Secrets**: Meta/AI-provider tokens, verification values, the App Secret, and the handoff admin token. These come from environment variables or n8n credentials and never enter prompts or logs.
+The deterministic router is the policy boundary. Clearly irrelevant or adversarial input is answered there, before a Workers AI request can be built.
 
-The language model cannot turn customer text into trusted facts. Product and FAQ lookups create a small `trusted_context`, plus stable `trusted_source_ids`. The output validator accepts only those source IDs and rejects unsupported numeric claims.
+## Deterministic routing
 
-## Supported classification schema
+The router performs, in order:
+
+1. language detection;
+2. data-driven product alias matching;
+3. explicit security and out-of-scope rejection;
+4. deterministic intent signals;
+5. structured product/store/FAQ lookup;
+6. direct response where the source-of-truth data is sufficient;
+7. an `ai_needed` decision only for a relevant unresolved or interpretive question.
+
+Product aliases live only in product data. Normalization lowercases text, removes basic punctuation and Latin diacritics, and collapses whitespace. Multiple explicit products produce a comparison only when the message contains comparison language; otherwise the bot asks for clarification.
+
+## Workers AI adapter
+
+Provider-specific behavior is isolated to the build, HTTP, and validation nodes. The current adapter calls:
+
+```text
+POST /client/v4/accounts/{account_id}/ai/run/{model}
+```
+
+Its input contract is:
 
 ```json
 {
+  "normalized_message": "customer user data",
   "language": "darija",
-  "intent": "product_price",
-  "product_query": "Jagwar glasses",
-  "attributes": {
-    "color": null,
-    "size": null,
-    "quantity": null
-  },
-  "needs_human": false,
-  "confidence": 0.95
+  "ai_context": {
+    "products": [],
+    "store": {}
+  }
 }
 ```
 
-Languages are `darija`, `french`, `english`, and `unknown`. Intents are `greeting`, `faq`, `product_search`, `product_price`, `product_availability`, `delivery`, `cod`, `recommendation`, `order`, `human_support`, and `unknown`.
+Only matched products and question-relevant store fields are included. The system message is fixed; customer text is a separate user-role JSON payload. The provider adapter returns:
 
-If the AI classifier is unavailable or invalid, deterministic keyword classification keeps the flow safe. Low confidence and unknown intent always escalate.
+```json
+{
+  "reply": "...",
+  "should_handoff": false,
+  "response_source": "cloudflare_ai",
+  "ai_status": "success"
+}
+```
 
-## Product search boundary
+Failures return a localized deterministic reply, `response_source=deterministic`, and a handoff status. Replacing Cloudflare requires only a new adapter that preserves these contracts.
 
-`Modular Product Search` currently performs normalized token matching over the mounted JSON catalogue and returns at most three complete product records. Generic terms such as “glasses” or “price” do not produce a model match on their own; a model or audience term is needed. A generic recommendation may return listed products whose stock is not explicitly zero, but the reply never claims availability when stock is unknown.
+## Grounding controls
 
-To replace the catalogue:
+- The JSON catalogue/configuration is authoritative; the model is not a database.
+- Only relevant matched records enter `ai_context`.
+- Prices and other numeric claims must already appear in trusted context or the customer question.
+- Unsupported size, color, material, warranty, promotion, authenticity, and waterproof claims are rejected.
+- Credential/prompt/environment terminology in output is rejected.
+- Invalid JSON, excessive output, a model-requested handoff, missing configuration, 429, and 5xx all fail closed to a safe handoff response.
+- Output is capped at 700 characters and model generation at 64–512 tokens.
 
-1. Replace `Load Store Data` and/or `Modular Product Search` with a Shopify, Google Sheets, PostgreSQL, Airtable, or HTTP node.
-2. Keep the output contract: `product_results`, `trusted_context`, `trusted_source_ids`, and `needs_human`.
-3. Return exact source values; do not summarize them with AI before validation.
-4. Run the scenario and regression tests against known products and missing products.
+## Image boundary
+
+Incoming images are treated as a supported message type so the customer receives a useful reply. No media is downloaded and no Media ID is stored or mapped to a product. Meta Media IDs can change across uploads and are not stable catalogue keys. V1 performs no vision inference and never sends an image to Workers AI.
+
+If `last_product_id` is current, the bot may ask whether the image question concerns that product; it never claims the image itself established the identity.
 
 ## Persistence model
 
-The MVP uses n8n workflow static data because it needs no additional infrastructure. It stores:
+Workflow static data stores:
 
 ```text
 sessions[phone_number]
-  phone_number
   language
   last_intent
-  recent_messages (last 12 user/assistant entries)
+  last_product_id
+  last_product_at
   last_seen
   human_handoff
 
@@ -88,23 +113,15 @@ processed_message_ids[message_id]
   received_at / processed_at
   phone_number
   status
+  response_source
 ```
 
-Processed IDs expire after seven days; inactive sessions expire after 90 days. Static data persists only for successful production executions of an active workflow. It is appropriate for one low-volume MVP instance, but not concurrent queue-mode workers or multi-tenant deployments.
+Product context is accepted for 24 hours, processed IDs expire after seven days, and inactive sessions expire after 90 days. The workflow does not keep or send an unbounded conversation transcript.
 
-### PostgreSQL or Redis migration
+Static data is appropriate for one low-volume active workflow. It is not an atomic deduplication store for concurrent queue-mode workers. Before scaling, use a database uniqueness constraint on `(store_id, message_id)` and a bounded session record keyed by `(store_id, phone_number)`.
 
-- Create `customer_sessions` keyed by `(store_id, phone_number)`.
-- Create `processed_messages` with a unique `(store_id, message_id)` constraint.
-- Insert the message ID atomically before processing; treat a uniqueness conflict as a duplicate.
-- Store recent messages in a bounded JSONB field or normalized messages table.
-- Use Redis for short-lived locks/deduplication only if durable conversation history remains elsewhere.
-- Replace the two static-data Code nodes and the admin clear node; the intent, lookup, AI, validation, and send contracts remain unchanged.
+## Handoff and error behavior
 
-## Handoff lifecycle
+Explicit human requests, returns/refunds, unknown live stock, and AI/provider failures set the handoff lock. Later events are recorded for deduplication but do not proceed to store routing or AI. Staff clears the lock through the timing-safe-token-protected admin webhook.
 
-An escalation sends one localized transfer message and sets the session lock. Later inbound events are deduplicated and appended to recent history, but they do not reach classification or AI. Staff clears the lock through the protected webhook after resolving the conversation. A future human-agent dashboard can call this endpoint or replace it with a database update.
-
-## Error behavior
-
-Expected AI failures use deterministic fallbacks in the main workflow. Unexpected n8n errors enter the error workflow, which logs workflow name, failed node, customer number when recoverable, timestamp, execution ID, and a bounded error message. It never sends stack traces or workflow details to the customer. A localized customer fallback is sent only when a phone number is available and the failed node was not already the WhatsApp send node.
+Unexpected n8n failures enter the error workflow. Logs contain workflow name, node, execution ID, timestamp, a redacted bounded error message, and only the final four phone digits. Stack traces, Authorization values, tokens, and complete customer phone numbers are not deliberately logged.

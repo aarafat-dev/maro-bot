@@ -1,48 +1,37 @@
 {
   "store_name": "Demo Store",
   "country": "Morocco",
-  "languages": [
-    "darija",
-    "french",
-    "english"
-  ],
+  "languages": ["darija", "arabic", "french", "english"],
   "default_language": "darija",
   "currency": "MAD",
   "cod_enabled": true,
-  "inspect_before_payment": true,
-  "pricing": {
-    "single_quantity": 1,
-    "single_price_mad": 90,
-    "bundle_quantity": 2,
-    "bundle_price_mad": 150
-  },
   "delivery": {
-    "areas": [
-      "Morocco"
-    ],
-    "price_mad": 29,
-    "estimated_days": "less than 24 hours",
-    "estimated_text": {
-      "darija": "فأقل من 24 ساعة",
-      "french": "en moins de 24 heures",
-      "english": "in less than 24 hours"
-    }
-  },
-  "exchange": {
-    "enabled": true,
-    "condition": "Exchange is available if the customer does not like the glasses"
+    "areas": ["Morocco"],
+    "free": true,
+    "price_mad": 0,
+    "to_customer_door": true,
+    "description": "Free delivery to customer's door.",
+    "estimated_days": null
   },
   "opening_hours": null,
   "human_support_number": "+212600000000",
   "reply_max_characters": 700,
   "handoff_messages": {
-    "darija": "Ma متأكدش 100% mn had lma3louma. Ghadi n7awwel talab dyalk l'équipe dyal lma7al باش يعاونوك.",
-    "french": "Je ne suis pas complètement sûr de cette information. Je transfère votre demande à l'équipe du magasin.",
-    "english": "I'm not completely sure about that. I'll transfer this request to the store team."
+    "darija": "هاد المعلومة خاص المسؤول يأكدها ليك. غادي نخلي ليه طلبك باش يجاوبك.",
+    "arabic": "هذه المعلومة تحتاج إلى تأكيد من مسؤول المتجر. سأحوّل له طلبك.",
+    "french": "Cette information doit être confirmée par l'équipe du magasin. Je lui transfère votre demande.",
+    "english": "The store team needs to confirm this information. I'll transfer your request."
   },
-  "error_messages": {
-    "darija": "Sme7 lina, kayn mochkil مؤقت. L'équipe dyal lma7al ghadi t3awnek قريباً.",
-    "french": "Désolé, un problème temporaire est survenu. L'équipe du magasin vous aidera sous peu.",
-    "english": "Sorry, there was a temporary problem. The store team will help you shortly."
+  "technical_error_messages": {
+    "darija": "سمح لينا، كاين مشكل تقني مؤقت. نقدر نخلي الطلب ديالك للمسؤول باش يجاوبك.",
+    "arabic": "عذرًا، يوجد عطل تقني مؤقت. يمكنني تحويل طلبك إلى مسؤول المتجر.",
+    "french": "Désolé, un problème technique temporaire est survenu. Je peux transmettre votre demande à l'équipe.",
+    "english": "Sorry, there is a temporary technical problem. I can pass your request to the store team."
+  },
+  "out_of_scope_messages": {
+    "darija": "مرحبا 👋 أنا مساعد المتجر. نقدر نعاونك فالمنتوجات، الثمن، المقاسات، الجودة، التوصيل والطلبات. شنو المنتوج اللي بغيتي تسول عليه؟",
+    "arabic": "مرحبًا 👋 أنا مساعد المتجر. يمكنني مساعدتك في المنتجات والأسعار والمقاسات والجودة والتوصيل والطلبات.",
+    "french": "Bonjour 👋 Je suis l'assistant du magasin. Je peux vous aider avec les produits, prix, tailles, qualité, livraison et commandes.",
+    "english": "Hello 👋 I'm the store assistant. I can help with products, prices, sizes, quality, delivery, and orders."
   }
 }

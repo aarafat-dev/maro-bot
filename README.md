@@ -1,77 +1,55 @@
-# WhatsApp Store Bot
+# WhatsApp Store Sales Assistant
 
-A reusable customer-support MVP for ecommerce stores, built with n8n, the official Meta WhatsApp Cloud API, and an OpenAI-compatible AI provider. It handles Darija, French, and English, searches client-owned data before answering, validates model output, and escalates whenever a fact is missing or uncertain.
+A production-oriented, low-cost WhatsApp sales assistant built with n8n, Meta WhatsApp Cloud API, structured store data, and Cloudflare Workers AI as a narrowly gated fallback.
 
-The repository contains importable n8n workflows—not an unofficial WhatsApp Web client and not a custom backend service.
+The catalogue and store JSON files are authoritative. Greetings, prices, sizes, delivery, known payment facts, obvious product questions, images, irrelevant requests, and security probes are handled without AI. Workers AI is called only when a store-related question genuinely needs language interpretation.
 
-## What it does
-
-- Receives and acknowledges Meta webhook events.
-- Handles Meta's `GET` webhook verification challenge.
-- Optionally verifies `X-Hub-Signature-256` against the Meta App Secret.
-- Normalizes phone number, message ID, text, type, timestamp, and customer name.
-- Ignores statuses, unsupported message types, and empty events.
-- Detects Darija, French, English, and unknown language.
-- Classifies all MVP intents with strict JSON output.
-- Searches FAQ, delivery, COD, and product data before composing a factual reply.
-- Uses the configured AI provider only for classification and natural wording; deterministic fallbacks keep the bot useful during AI errors.
-- Rejects ungrounded output, unexpected source IDs, leaked internal terms, and unsupported numeric claims.
-- Stores recent conversation context per WhatsApp phone number.
-- Deduplicates webhook retries by WhatsApp message ID.
-- Locks automation after a human handoff and exposes a protected endpoint for clearing that lock.
-- Logs unexpected workflow failures without exposing internals to customers.
-
-## Architecture
+## Message flow
 
 ```text
-Customer → WhatsApp → Meta Cloud API → n8n webhook
-                                          ↓
-                              validate and normalize
-                                          ↓
-                          session and duplicate guard
-                                          ↓
-                          language + intent classifier
-                                          ↓
-                     FAQ / product / order / human route
-                                          ↓
-                           deterministic trusted context
-                                          ↓
-                         AI wording → output validation
-                                          ↓
-                       save conversation → Cloud API send
+Meta WhatsApp
+  → n8n webhook + immediate acknowledgment
+  → payload / phone-number / optional HMAC validation
+  → input normalization and length cap
+  → duplicate + handoff guard
+  → read-only store data
+  → deterministic security, relevance, intent, and alias matching
+      ├─ answer known fact directly (response_source=deterministic)
+      ├─ reject irrelevant/adversarial input directly
+      ├─ clarify ambiguous product or image directly
+      └─ relevant unresolved question only
+           → Cloudflare Workers AI REST API
+           → grounding/output validation
+           → response_source=cloudflare_ai, or safe deterministic handoff fallback
+  → bounded structured session state
+  → Meta messages endpoint
 ```
 
-The product search node is the replaceable data boundary. Swap it for Shopify, Google Sheets, PostgreSQL, Airtable, or another API without changing the safety and response nodes. See [architecture.md](docs/architecture.md).
+The GET verification webhook and protected handoff-clear webhook remain separate branches. Unexpected failures go to the separate error workflow, which redacts credential-shaped text and logs only the last four customer-number digits.
 
 ## Requirements
 
-- Docker Engine and the Docker Compose v2 plugin (`docker compose version`).
-- A public HTTPS hostname for production webhooks.
-- A Meta Developer account and Meta app with the WhatsApp product.
-- A WhatsApp test or production phone number.
-- A Groq API key for the free default, or another Responses API-compatible provider key.
-- Node.js 20 or newer only if running the offline repository tests.
-- `jq`, `curl`, and `openssl` for the shell smoke tests.
+- Docker Engine and Docker Compose v2.
+- A public HTTPS hostname for Meta webhooks.
+- A Meta app with WhatsApp Cloud API.
+- A Cloudflare account with Workers AI access.
+- Node.js 20+ for offline tests.
+- `jq`, `curl`, and `openssl` for shell smoke tests.
 
-## Local installation
+## Local setup
 
 ```bash
 cp .env.example .env
 cp data/products.example.json data/products.json
 cp data/faq.example.json data/faq.json
 cp data/store-config.example.json data/store-config.json
-```
-
-Generate two different random secrets:
-
-```bash
 openssl rand -hex 32
 openssl rand -hex 32
 ```
 
-Put the first value in `N8N_ENCRYPTION_KEY` and the second in `HANDOFF_ADMIN_TOKEN`. Edit the three non-example JSON files for the client. They are ignored by Git.
+Use different generated values for `N8N_ENCRYPTION_KEY` and `HANDOFF_ADMIN_TOKEN`. Never commit `.env`.
 
-Validate and start n8n:
+Validate and start:
 
 ```bash
 docker compose config
@@ -80,172 +58,199 @@ docker compose ps
 docker compose logs --tail=100 n8n
 ```
 
-Open <http://localhost:5678> and create the n8n owner account. Local HTTP is for development only.
-
-## Environment configuration
-
-All supported variables are documented inline in [.env.example](.env.example). The required client values are:
+## Environment variables
 
 | Variable | Purpose |
 | --- | --- |
-| `N8N_ENCRYPTION_KEY` | Encrypts n8n credentials at rest; never rotate casually. |
-| `WHATSAPP_ACCESS_TOKEN` | Meta System User or temporary test token. |
-| `WHATSAPP_PHONE_NUMBER_ID` | Sender phone-number resource ID, not the visible phone number. |
-| `WHATSAPP_BUSINESS_ACCOUNT_ID` | WABA ID, reserved for later account operations. |
-| `WHATSAPP_VERIFY_TOKEN` | Private value used during Meta webhook verification. |
-| `WHATSAPP_APP_SECRET` | Used for webhook HMAC verification. |
+| `N8N_ENCRYPTION_KEY` | Encrypts persisted n8n credentials; keep stable and backed up. |
+| `WHATSAPP_ACCESS_TOKEN` | Meta System User token or temporary test token. |
+| `WHATSAPP_PHONE_NUMBER_ID` | Meta sender resource ID. |
+| `WHATSAPP_BUSINESS_ACCOUNT_ID` | WABA ID. |
+| `WHATSAPP_VERIFY_TOKEN` | Private webhook verification value. |
+| `WHATSAPP_APP_SECRET` | Verifies `X-Hub-Signature-256`. |
 | `HANDOFF_ADMIN_TOKEN` | Protects the clear-handoff endpoint. |
-| `AI_API_KEY` | Authorizes AI Responses API calls; use the Groq key by default. |
-| `AI_BASE_URL` | Provider API base URL; defaults to Groq. |
-| `AI_MODEL` | Provider model ID; defaults to `openai/gpt-oss-20b`. |
+| `CLOUDFLARE_ACCOUNT_ID` | Account that owns Workers AI usage. |
+| `CLOUDFLARE_API_TOKEN` | Dedicated Workers AI API token. |
+| `CLOUDFLARE_AI_MODEL` | Configurable Cloudflare model identifier. |
+| `CLOUDFLARE_AI_MAX_TOKENS` | Output cap, clamped by the workflow to 64–512. |
 
-`DATABASE_URL` is deliberately unused in this MVP. It reserves a clear migration path to PostgreSQL.
+The default model is `@cf/meta/llama-3.1-8b-instruct-fp8`, a currently supported Cloudflare-hosted multilingual text-generation model. The model is configured once through the environment and is not scattered through routing nodes.
 
-## Importing the workflows
+## Cloudflare Workers AI setup
 
-1. Start n8n and sign in.
-2. Import [whatsapp-main.json](n8n/workflows/whatsapp-main.json).
-3. Import [error-handler.json](n8n/workflows/error-handler.json).
-4. Open the main workflow settings and select `WhatsApp Store Bot - Error Handler` as its error workflow.
-5. Save both workflows.
-6. Confirm the three JSON files are visible inside the container at `/store-data`.
-7. Activate the main workflow. Static conversation data is persisted only by production executions, not editor test runs.
-
-The workflows use environment expressions for portability. For stricter production isolation, move the Meta and AI-provider tokens to n8n Header Auth credentials as described in [credentials-notes.md](n8n/credentials-notes.md).
-
-## Meta WhatsApp setup
-
-The production callback URL is:
+No separately deployed Worker is required. n8n calls Cloudflare's supported REST endpoint directly:
 
 ```text
-https://YOUR_BOT_DOMAIN/webhook/whatsapp/webhook
+POST https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/run/{MODEL}
 ```
 
-Enter the exact value from `WHATSAPP_VERIFY_TOKEN`, verify the callback, then subscribe the WhatsApp Business Account to `messages`. Set `VERIFY_META_SIGNATURE=true` before accepting production traffic.
+1. Open Cloudflare Dashboard → Workers AI → **Use REST API**.
+2. Copy the Account ID into `CLOUDFLARE_ACCOUNT_ID`.
+3. Choose **Create a Workers AI API Token** and scope it only to the account used by this bot. Do not grant DNS, tunnel, zone, or unrelated permissions. If creating a custom token, follow Cloudflare's current REST guide for the required Workers AI permissions.
+4. Copy the token once into `CLOUDFLARE_API_TOKEN` in `.env` or, preferably, an n8n Header Auth credential.
+5. Keep the default model or set another compatible text-generation model in `CLOUDFLARE_AI_MODEL`.
+6. Restart n8n after changing environment values.
 
-The full ten-step Meta setup, test-number instructions, permanent-token guidance, and troubleshooting are in [meta-whatsapp-setup.md](docs/meta-whatsapp-setup.md).
+Official references:
 
-## AI setup and grounding
+- [Workers AI REST API setup](https://developers.cloudflare.com/workers-ai/get-started/rest-api/)
+- [Workers AI model catalogue](https://developers.cloudflare.com/workers-ai/models/)
+- [Cloudflare API token creation](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)
 
-The default free configuration uses Groq's OpenAI-compatible Responses API and `openai/gpt-oss-20b`. Set `AI_API_KEY` to your Groq key; `AI_BASE_URL` and `AI_MODEL` are already populated in `.env.example`. Both calls use strict JSON Schema output and `store: false`:
+## Where AI is called
 
-1. Language and intent classification.
-2. Brief natural wording from trusted context.
+Workers AI is not called for:
 
-Customer text is explicitly delimited as untrusted input. The model never queries arbitrary store facts. FAQ and product nodes construct the only trusted context, and a separate validation node rejects ungrounded source IDs, unsupported numbers, secret-like output, or factual wording without a source. A deterministic reply or human handoff is used on failure.
+- greetings and “I have a question” openers;
+- known product price or size questions;
+- known delivery or payment facts;
+- known catalogue characteristics;
+- unsupported size/material/color facts that can be answered safely as unknown;
+- ambiguous product identification, which receives a deterministic clarification;
+- out-of-scope requests and prompt/secret/command injection attempts;
+- incoming images;
+- duplicate messages or sessions locked for human handoff.
 
-Older deployments using `OPENAI_API_KEY` and `OPENAI_MODEL` remain supported when all three `AI_*` variables are blank.
+Workers AI is called once when all of these are true:
 
-## Testing
+1. the message passed the security and relevance gate;
+2. it is clearly related to this store or the current product context;
+3. deterministic logic cannot confidently answer it; and
+4. natural-language interpretation is useful, such as a nuanced comparison using multiple known facts.
 
-Run the fully offline checks; no API keys are needed:
+Only the normalized customer message, matched product records, relevant store fields, and language are sent. Secrets, Docker settings, `.env`, unrelated products, logs, and full conversation history are never added to the request.
+
+Each prepared response contains:
+
+```text
+response_source=deterministic
+```
+
+or:
+
+```text
+response_source=cloudflare_ai
+```
+
+Inspect `response_source` in the n8n execution data after the router/validator nodes. It is also recorded against the processed message ID in workflow static data; it is not sent to the customer.
+
+## Cloudflare failure behavior
+
+The HTTP node has a 20-second timeout and at most two total attempts. HTTP 429, 5xx, missing credentials, malformed model output, and failed grounding checks produce a localized deterministic technical response and activate the existing human-handoff lock. There is no retry loop.
+
+## Products and aliases
+
+Edit `data/products.json`; keep `data/products.example.json` aligned for tests and new deployments. Aliases are data-driven:
+
+```json
+{
+  "id": "nike-double-face-jacket",
+  "name": "Jaket Nike Double Face",
+  "aliases": ["nike", "jaket nike", "veste nike", "جاكيط نايك"]
+}
+```
+
+Matching lowercases text, removes basic punctuation/diacritics, collapses whitespace, and compares product names and aliases. Do not add speculative colors, materials, stock, promotions, or sizing advice. When more than one product is plausibly named and the message is not a comparison, the bot asks which product the customer means.
+
+## Conversation context
+
+The workflow stores only lightweight structured state per phone number:
+
+```text
+language
+last_intent
+last_product_id
+last_product_at
+last_seen
+human_handoff
+```
+
+`last_product_id` expires for routing after 24 hours. Sessions are pruned after 90 days and processed message IDs after seven days. Customer message history is not forwarded to AI or retained as an unbounded transcript. This lets `taman nike` followed by `w tailles?` resolve to the Nike product.
+
+## Incoming images (V1)
+
+Images are never downloaded, recognized, or sent to Workers AI. The workflow does not persist or map Meta Media IDs because re-uploads can receive different IDs and they are not durable product identifiers. Without current product context, the bot asks whether the customer means Jaket Nike Double Face or Top Coton Montoni. With recent context, it asks whether the image question concerns that known product without claiming it identified the image.
+
+The normalization/router boundary leaves room for a future explicitly authorized vision service without changing webhook, deduplication, state, or send nodes.
+
+## Security and relevance filtering
+
+Input is control-character cleaned, whitespace-normalized, and capped at 1,000 characters before routing. Explicit prompt extraction, secret access, environment/file access, command execution, malware/code, homework, politics, and unrelated public-figure questions receive a static store-scope reply and never reach AI.
+
+The filter intentionally allows normal openers such as `salam`, `bonjour`, `hello`, `bghit nswlk`, and `wach momkin nswlk?`.
+
+Customer text is always placed in the user message of the Workers AI request as JSON data. It is never inserted into the system instructions. Code nodes never construct shell commands or file paths from customer input; store files are fixed paths mounted read-only.
+
+## Testing without WhatsApp
+
+All routing and provider-failure tests are offline and require no credentials:
 
 ```bash
 npm test
 ```
 
-This validates JSON, workflow topology, embedded Code-node syntax, secret patterns, data contracts, and these scenarios:
+The suite regenerates both workflow exports, validates every embedded Code node, checks for committed secret patterns, and exercises the fourteen required deterministic/AI scenarios, including image handling, follow-up product context, 429, and 5xx responses.
 
-- `Salam` → Darija greeting.
-- `Vous livrez à Casablanca ?` → French answer using configured delivery data.
-- `ch7al Jagwar?` → 90 MAD for one pair, 150 MAD for two, and 29 MAD delivery.
-- `wach Jagwar kayna?` → human confirmation because stock was not supplied.
-- `3ndkom ndader Nokia titanium?` → no invented product; human handoff.
-- `wach n9der nchofhom 9bel mankhless?` → inspect first, then pay on delivery.
-- `ila ma3jbnich n9der nbdel?` → confirms the configured exchange policy.
-- `bghit nhder m3a chi wahed` → handoff lock.
-- prompt injection → no hidden data or credential disclosure.
-- duplicate message ID → no second automated reply.
+Run only routing scenarios:
 
-After activating the workflow, simulate an inbound webhook:
+```bash
+npm run test:scenarios
+```
+
+After importing and activating the workflow, simulate a signed Meta webhook:
 
 ```bash
 TEST_CUSTOMER_PHONE=2126XXXXXXXX scripts/test-webhook.sh https://YOUR_BOT_DOMAIN
 ```
 
-Send an outbound Meta test message:
+This can trigger a real outbound reply if production credentials and the test recipient are configured. The Node.js test suite itself never sends WhatsApp messages or calls Workers AI.
 
-```bash
-TEST_RECIPIENT_PHONE=2126XXXXXXXX scripts/test-message.sh "Hello from the store bot"
-```
+## n8n workflow import/update
 
-Only send free-form outbound messages when Meta permits them; outside the customer-service window, use an approved template.
+1. Back up the n8n volume and export the currently active workflows.
+2. Import `n8n/workflows/error-handler.json` and `n8n/workflows/whatsapp-main.json`.
+3. If n8n creates new copies, deactivate the old main workflow before activating the new one; webhook paths must be unique.
+4. Assign the imported error handler in the main workflow settings.
+5. Confirm environment access is allowed and the three JSON files are visible under `/store-data`.
+6. Activate the main workflow exactly once.
+7. Run deterministic tests before adding Cloudflare credentials, then verify one controlled AI-routed comparison.
+
+Importing as a new workflow creates a new static-data scope, so existing deduplication/session/handoff state is not automatically migrated. Update the existing workflow in place if retaining that state is operationally required.
 
 ## Human handoff
 
-The workflow sets `human_handoff=true` for explicit human requests, complaints/refunds/payment issues, unknown or low-confidence requests, missing data, failed product searches, and unsafe model output. Later messages are recorded but receive no automated reply while the lock is active.
-
-After a staff member finishes the conversation, clear the lock:
+Missing live stock, explicit human requests, returns/refunds, and AI/provider failures set `human_handoff=true`. Later messages are deduplicated but receive no automation until staff clears the lock:
 
 ```bash
 scripts/clear-handoff.sh 2126XXXXXXXX https://YOUR_BOT_DOMAIN
 ```
 
-Keep this admin endpoint behind network controls when possible and always protect it with a long, independent token.
+Protect the admin path at the network layer and keep `HANDOFF_ADMIN_TOKEN` independent from every other secret.
 
-## Deployment
+## Replacing Cloudflare later
 
-Production requires:
+Provider-specific logic is isolated to three nodes generated by `scripts/build-workflows.mjs`:
 
-- HTTPS termination with a valid public certificate.
-- Correct public `WEBHOOK_URL` and `N8N_EDITOR_BASE_URL` values.
-- n8n owner authentication and restricted editor access.
-- A persistent `n8n_data` volume with tested backups.
-- `N8N_SECURE_COOKIE=true`.
-- `VERIFY_META_SIGNATURE=true` and a correct Meta App Secret.
-- A long-lived least-privilege Meta System User token.
-- Client-specific JSON data reviewed by the store owner.
-- Execution pruning, monitoring, and an assigned error workflow.
+- `Build Cloudflare AI Request`
+- `Call Cloudflare Workers AI`
+- `Validate Cloudflare AI Reply`
 
-See [deployment.md](docs/deployment.md) for the rollout, backup, rollback, and client onboarding checklists.
+A later Groq, OpenAI, or other provider adapter should preserve the router input (`normalized_message`, `language`, `ai_context`) and validator output (`reply`, `should_handoff`, `response_source`, `ai_status`). No webhook, catalogue, security, deduplication, handoff, or Meta send redesign is needed.
 
-## Client onboarding
+## Production notes
 
-For each new store:
+- Use a stable named HTTPS tunnel or reverse proxy; accountless Quick Tunnels have no uptime guarantee.
+- Restrict the n8n editor separately from public webhook routes.
+- Set `VERIFY_META_SIGNATURE=true` and use the correct Meta App Secret.
+- Use a long-lived least-privilege Meta System User token; temporary test tokens expire.
+- Keep `N8N_ENCRYPTION_KEY` stable and back up the matching n8n volume.
+- Review every catalogue and store-policy fact with the store owner.
+- Static workflow data is suitable for one low-volume instance, not concurrent queue workers; migrate deduplication/session state to PostgreSQL before scaling.
 
-1. Copy this repository into a separate private deployment.
-2. Create client-specific `.env` and non-example data files.
-3. Confirm every price, stock value, policy, delivery promise, and FAQ with the client.
-4. Create or connect the client's Meta app, WABA, and phone number.
-5. Import and configure both workflows.
-6. Run all offline and live test cases in all supported languages.
-7. Train staff on handoff notifications and lock clearing.
-8. Activate production and monitor the first conversations closely.
+More detail:
 
-Do not share one static-data workflow across unrelated clients. Use a separate deployment per client until multi-tenant storage and isolation are implemented.
-
-## Security considerations
-
-- No credentials are committed; `.env` and live client data are ignored.
-- The official Cloud API is used—never WhatsApp Web session automation.
-- Webhook payload shape, phone-number ID, and optionally Meta HMAC are validated.
-- Inputs are length-limited and control characters are removed.
-- Tokens are never written to workflow logs.
-- AI requests use `store: false`; review your own privacy and retention requirements.
-- The read-only `/store-data` mount limits accidental catalogue writes.
-- `fs` and `crypto` are the only built-ins enabled in Code nodes.
-- Restrict n8n editor access separately from the public webhook paths.
-- Rotate compromised tokens and update the relevant Meta/n8n credentials immediately.
-
-## Data and workflow development
-
-Business configuration lives in `data/`; automation logic lives in `scripts/build-workflows.mjs`. Regenerate the importable exports after changing workflow source:
-
-```bash
-npm run build:workflows
-npm test
-```
-
-Changes made directly in the n8n editor are not automatically copied back to the generator. Export, review, and deliberately reconcile them.
-
-## Future improvements
-
-The architecture leaves clear boundaries for Shopify live catalogue and order creation, order status, Google Sheets CRM, PostgreSQL, Redis, voice-note transcription, image/product recognition, abandoned-cart follow-ups, segmentation, analytics, automatic lead capture, a human-agent dashboard, and multi-store tenancy. These are documented but intentionally not implemented in this MVP.
-
-## Documentation index
-
-- [Architecture and safety boundaries](docs/architecture.md)
-- [Meta WhatsApp Cloud API setup](docs/meta-whatsapp-setup.md)
-- [n8n import, operation, and persistence](docs/n8n-setup.md)
-- [Deployment and onboarding](docs/deployment.md)
+- [Architecture and trust boundaries](docs/architecture.md)
+- [Deployment checklist](docs/deployment.md)
+- [Meta WhatsApp setup](docs/meta-whatsapp-setup.md)
+- [n8n operation](docs/n8n-setup.md)
 - [Credential handling](n8n/credentials-notes.md)

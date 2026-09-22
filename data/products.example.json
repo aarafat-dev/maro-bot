@@ -1,59 +1,70 @@
 [
   {
-    "id": "glasses-boys-jagwar",
-    "name": "Jagwar Glasses",
-    "category": "glasses",
-    "audience": "boys",
-    "price": 90,
+    "id": "nike-double-face-jacket",
+    "name": "Jaket Nike Double Face",
+    "category": "clothing",
+    "price": 249,
     "currency": "MAD",
     "stock": null,
+    "sizes": ["S", "M", "L", "XL"],
     "colors": [],
-    "compatible_devices": [],
-    "aliases": ["Jagwar"],
-    "description": "Glasses model for boys",
-    "product_url": ""
+    "material": null,
+    "characteristics": [
+      "Nike-style jacket",
+      "double face / reversible",
+      "clothing product"
+    ],
+    "delivery": {
+      "free": true,
+      "description": "Free delivery to customer's door."
+    },
+    "payment": null,
+    "aliases": [
+      "nike",
+      "jaket nike",
+      "jacket nike",
+      "veste nike",
+      "nike double face",
+      "double face",
+      "جاكيط نايك",
+      "جاكيت نايك",
+      "نايك"
+    ]
   },
   {
-    "id": "glasses-boys-zyech",
-    "name": "Zyech Glasses",
-    "category": "glasses",
-    "audience": "boys",
-    "price": 90,
+    "id": "cotton-montoni-tracksuit",
+    "name": "Top Coton Montoni",
+    "category": "clothing",
+    "price": 219,
     "currency": "MAD",
     "stock": null,
+    "sizes": ["S", "M", "L", "XL"],
     "colors": [],
-    "compatible_devices": [],
-    "aliases": ["Zyech"],
-    "description": "Glasses model for boys",
-    "product_url": ""
-  },
-  {
-    "id": "glasses-boys-summer",
-    "name": "Summer Glasses",
-    "category": "glasses",
-    "audience": "boys",
-    "price": 90,
-    "currency": "MAD",
-    "stock": null,
-    "colors": [],
-    "compatible_devices": [],
-    "aliases": ["Summer"],
-    "description": "Glasses model for boys",
-    "product_url": ""
-  },
-  {
-    "id": "glasses-girls-miw-miw",
-    "name": "Miw Miw Glasses",
-    "category": "glasses",
-    "audience": "girls",
-    "price": 90,
-    "currency": "MAD",
-    "stock": null,
-    "colors": [],
-    "compatible_devices": [],
-    "aliases": ["Miw Miw"],
-    "description": "Glasses model for girls",
-    "product_url": ""
+    "material": "cotton",
+    "characteristics": [
+      "cotton",
+      "good quality",
+      "fabric marketed as resistant to pilling / مكيحببش"
+    ],
+    "delivery": {
+      "free": true,
+      "description": "Free delivery to customer's door."
+    },
+    "payment": {
+      "inspect_before_payment": true,
+      "description": "Customer can inspect/check the product before paying."
+    },
+    "aliases": [
+      "survetement",
+      "survêtement",
+      "tracksuit",
+      "ensemble",
+      "coton",
+      "montoni",
+      "top coton",
+      "توب قطن",
+      "مونطوني",
+      "قطن"
+    ]
   }
 ]
-

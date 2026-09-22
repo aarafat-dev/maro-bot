@@ -56,24 +56,25 @@ After importing a regenerated workflow, n8n may create a new workflow rather tha
 
 ## Environment expressions and credentials
 
-The portable export reads `$env` for Meta and AI-provider secrets. Ensure your self-hosted n8n instance permits environment access in nodes. The Compose file explicitly sets `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` for this workflow.
+The portable export reads `$env` for Meta and Cloudflare Workers AI settings. Ensure your self-hosted n8n instance permits environment access in nodes. The Compose file explicitly sets `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` for this workflow.
 
 For stronger separation, create two Header Auth credentials:
 
-- Meta: header `Authorization`, value `Bearer YOUR_TOKEN`.
-- AI provider: header `Authorization`, value `Bearer YOUR_AI_KEY`.
+- Meta: header `Authorization`, value `Bearer YOUR_META_TOKEN`.
+- Cloudflare: header `Authorization`, value `Bearer YOUR_CLOUDFLARE_API_TOKEN`.
 
-Assign them to the three HTTP nodes and remove the manual Authorization headers. See `n8n/credentials-notes.md`.
+Assign them to the corresponding Meta and Cloudflare HTTP nodes and remove the manual Authorization headers. See `n8n/credentials-notes.md`.
 
 ## Static-data memory
 
-Workflow static data persists after successful production executions of an active workflow. It does not reliably persist during editor/manual testing. The main workflow keeps bounded session history and seven days of processed message IDs, and prunes sessions inactive for 90 days.
+Workflow static data persists after successful production executions of an active workflow. It does not reliably persist during editor/manual testing. The main workflow keeps structured language/intent/product/handoff state and seven days of processed message IDs. Product context expires after 24 hours, and sessions inactive for 90 days are pruned.
 
 Limitations:
 
 - concurrent executions can race;
 - queue-mode workers do not provide a robust atomic deduplication guarantee;
 - static data is stored with the workflow and is not a customer-service UI;
+- importing as a new workflow creates a new static-data scope and does not migrate prior handoff/context state;
 - one workflow should serve one store/client.
 
 For higher traffic, move sessions to PostgreSQL and use a unique message-ID constraint. Redis can supply short locks, but durable history should remain in PostgreSQL. The exact schema is in `docs/architecture.md`.
@@ -96,7 +97,18 @@ Assign the error workflow manually after import because n8n workflow IDs are ins
 docker compose logs --since=30m n8n
 ```
 
-Expected AI-provider/network response failures are handled in the main workflow and normally do not invoke the error handler. The deterministic response validator handles them.
+Expected Cloudflare 429/5xx, timeout, configuration, and output-validation failures are handled in the main workflow and normally do not invoke the error handler. They produce a safe localized response and activate human handoff.
+
+## Updating the imported workflow
+
+1. Export the active workflows and back up `n8n_data`.
+2. Import the regenerated main and error-handler JSON files.
+3. Deactivate the previous main workflow before activating a newly imported copy; webhook paths are global.
+4. Reassign the error workflow in main workflow settings.
+5. Confirm `Call Cloudflare Workers AI` uses the environment expression or a dedicated Header Auth credential.
+6. Run `npm test`, then one deterministic test execution and one controlled AI-routed comparison.
+
+To preserve existing static sessions and handoff locks, update the existing workflow rather than activating a separate imported copy, or deliberately migrate that state first.
 
 ## Workflow source and exports
 

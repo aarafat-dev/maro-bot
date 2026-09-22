@@ -1,94 +1,68 @@
 [
   {
-    "id": "faq-cod-inspection",
-    "intent": "cod",
-    "keywords": [
-      "cod", "cash on delivery", "pay when it arrives", "inspect before payment",
-      "paiement à la livraison", "voir avant de payer", "khlass mlli twsel",
-      "nchof 9bel mankhless", "الدفع عند الاستلام"
-    ],
-    "answers": {
-      "darija": "T9der تشوف الطلب ملي يوصلك، ومن بعد تخلص عند الاستلام.",
-      "french": "Vous pouvez vérifier votre commande à son arrivée, puis payer à la livraison.",
-      "english": "You can inspect your order when it arrives, then pay on delivery."
-    }
-  },
-  {
     "id": "faq-delivery",
     "intent": "delivery",
     "keywords": [
-      "delivery", "livraison", "tawsil", "توصيل", "casablanca", "morocco",
-      "maroc", "24 hours", "24h"
+      "delivery", "shipping", "livraison", "tawsil", "twsil", "fabor",
+      "gratuit", "gratuite", "free delivery", "توصيل", "التوصيل", "مجاني"
     ],
     "answers": {
-      "darija": "Taman dyal التوصيل 29 MAD، والتوصيل كيوصل فأقل من 24 ساعة.",
-      "french": "La livraison coûte 29 MAD et arrive en moins de 24 heures.",
-      "english": "Delivery costs 29 MAD and arrives in less than 24 hours."
+      "darija": "التوصيل مجاني حتى لباب الدار 🚚",
+      "french": "La livraison est gratuite jusqu'à votre porte 🚚",
+      "english": "Delivery is free to your door 🚚"
     }
   },
   {
-    "id": "faq-pricing",
-    "intent": "faq",
+    "id": "faq-payment",
+    "intent": "payment",
     "keywords": [
-      "one glasses", "one pair", "two glasses", "two pairs", "2 glasses",
-      "une paire", "deux lunettes", "jouj", "wa7da", "جوج", "نظارة واحدة"
+      "payment", "pay", "cod", "paiement", "payer", "nkhless", "khlass",
+      "قبل ما نخلص", "الدفع", "الاستلام"
     ],
     "answers": {
-      "darija": "نظارة وحدة ب 90 MAD، وجوج نظارات ب 150 MAD. التوصيل 29 MAD.",
-      "french": "Une paire de lunettes coûte 90 MAD et deux paires coûtent 150 MAD. La livraison coûte 29 MAD.",
-      "english": "One pair of glasses costs 90 MAD and two pairs cost 150 MAD. Delivery costs 29 MAD."
+      "darija": "طريقة الأداء كتقدر تختلف حسب المنتوج. قول ليا شنو المنتوج اللي كتقصد باش نعطيك المعلومة المؤكدة.",
+      "french": "Les conditions de paiement peuvent dépendre du produit. Indiquez-moi le produit pour obtenir l'information confirmée.",
+      "english": "Payment conditions may depend on the product. Tell me which product you mean for confirmed information."
     }
-  },
-  {
-    "id": "faq-exchange",
-    "intent": "faq",
-    "keywords": [
-      "exchange", "change", "échange", "échanger", "nbdel", "ma3jbnich",
-      "تبديل", "معجبنيش"
-    ],
-    "answers": {
-      "darija": "إلا ماعجباتكش النظارة، نقدروا نبدلوها ليك.",
-      "french": "Si les lunettes ne vous plaisent pas, nous pouvons vous les échanger.",
-      "english": "If you do not like the glasses, we can exchange them for you."
-    }
-  },
-  {
-    "id": "faq-return-refund",
-    "intent": "faq",
-    "keywords": [
-      "return", "refund", "retour", "remboursement", "nrje3", "ترجيع", "استرجاع"
-    ],
-    "answers": {
-      "darija": "معلومات الترجيع والاسترجاع خاص فريق المتجر يأكدها ليك. غادي نحول ليهم طلبك.",
-      "french": "Les conditions de retour et de remboursement doivent être confirmées par l'équipe du magasin. Je lui transfère votre demande.",
-      "english": "Return and refund conditions must be confirmed by the store team. I'll transfer your request."
-    },
-    "requires_human": true
-  },
-  {
-    "id": "faq-availability",
-    "intent": "product_availability",
-    "keywords": [
-      "available", "availability", "stock", "disponible", "disponibilité",
-      "kayna", "kayn", "متوفر"
-    ],
-    "answers": {
-      "darija": "عطيني موديل النظارة، وفريق المتجر غادي يأكد ليك واش متوفرة دابا.",
-      "french": "Donnez-moi le modèle des lunettes et l'équipe du magasin confirmera sa disponibilité.",
-      "english": "Tell me the glasses model and the store team will confirm current availability."
-    },
-    "requires_human": true
   },
   {
     "id": "faq-how-to-order",
     "intent": "order",
     "keywords": [
-      "order", "buy", "commander", "acheter", "ncommander", "nchri", "طلب", "نشري"
+      "order", "buy", "purchase", "commander", "acheter", "ncommandi", "nchri",
+      "طلب", "نطلب", "نشري"
     ],
     "answers": {
-      "darija": "صيفط لينا الموديل أو الموديلات، الكمية، سميتك، المدينة والعنوان. ملي يوصلك الطلب تقدر تشوفو ومن بعد تخلص.",
-      "french": "Envoyez le ou les modèles, la quantité, votre nom, votre ville et votre adresse. Vous pourrez vérifier la commande à son arrivée, puis payer.",
-      "english": "Send the model or models, quantity, your name, city, and address. You can inspect the order when it arrives, then pay."
+      "darija": "باش نعاونك فالطلب، صيفط لينا المنتوج، المقاس، الكمية، الاسم، المدينة والعنوان.",
+      "french": "Pour préparer votre commande, envoyez le produit, la taille, la quantité, le nom, la ville et l'adresse.",
+      "english": "To prepare your order, send the product, size, quantity, name, city, and address."
     }
+  },
+  {
+    "id": "faq-availability",
+    "intent": "availability",
+    "keywords": [
+      "available", "availability", "stock", "disponible", "disponibilité", "kayn", "kayna", "متوفر"
+    ],
+    "answers": {
+      "darija": "المخزون الحالي خاص المسؤول يأكدو ليك. نقدر نحول ليه طلبك.",
+      "french": "Le stock actuel doit être confirmé par l'équipe. Je peux lui transférer votre demande.",
+      "english": "Current stock must be confirmed by the store team. I can transfer your request."
+    },
+    "requires_human": true
+  },
+  {
+    "id": "faq-return-refund",
+    "intent": "returns",
+    "keywords": [
+      "return", "refund", "exchange", "retour", "remboursement", "échange", "nrje3", "nbdel",
+      "ترجيع", "استرجاع", "تبديل"
+    ],
+    "answers": {
+      "darija": "شروط التبديل أو الاسترجاع خاص فريق المتجر يأكدها ليك. غادي نحول ليهم طلبك.",
+      "french": "Les conditions d'échange ou de remboursement doivent être confirmées par l'équipe du magasin.",
+      "english": "Exchange or refund conditions must be confirmed by the store team."
+    },
+    "requires_human": true
   }
 ]
