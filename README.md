@@ -162,7 +162,7 @@ Edit `data/products.json`; keep `data/products.example.json` aligned for tests a
 
 Matching lowercases text, removes basic punctuation/diacritics, collapses whitespace, and compares product names and aliases. Do not add speculative colors, materials, stock, promotions, or sizing advice. When more than one product is plausibly named and the message is not a comparison, the bot asks which product the customer means.
 
-The store scope is four products. All four confirmed identities and their existing local catalog image paths are recorded. Complete commerce facts currently exist only for `nike-double-face-jacket` and `cotton-montoni-tracksuit`; products 3 and 4 keep unknown price, size, material, delivery, and payment fields as `null`/empty values instead of fabricated facts. The runtime loader excludes incomplete products from customer-facing sales routing until those required facts are confirmed.
+The store scope is four products. All four confirmed identities and their existing local catalog image paths are recorded. Every product uses sizes S, M, L, XL. The three tracksuits are 219 MAD, while `nike-double-face-jacket` is 249 MAD. Products 3 and 4 retain unknown material, delivery, and payment fields as `null` instead of fabricated facts.
 
 Catalog images remain under `data/products-images/` and are referenced through each product's `image_path`. These paths are catalog metadata only: they are not Meta Media IDs, are not uploaded automatically, and do not enable customer-image recognition. Outgoing product media still requires separately configured approved HTTPS entries under `media.images`.
 

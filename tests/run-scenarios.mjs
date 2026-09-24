@@ -306,6 +306,17 @@ for (const [message, expectedLanguage] of [
   assert.equal(languageResult.language, expectedLanguage);
 }
 
+for (const [message, expectedProduct] of [
+  ['taman survette nike noir', 'nike-black-tracksuit'],
+  ['taman quarter zip tracksuit', 'black-quarter-zip-tracksuit'],
+]) {
+  const priceResult = await route(message, 'extra-four-product-' + expectedProduct);
+  assert.equal(priceResult.intent, 'PRICE');
+  assert.equal(priceResult.primary_product_id, expectedProduct);
+  assert.match(priceResult.reply, /219/);
+  assertNoAi(priceResult, expectedProduct);
+}
+
 // Preserve duplicate protection and protected handoff clearing.
 const dedupState = {};
 const dedupInput = {
@@ -331,6 +342,6 @@ assert.equal(dedupState.sessions['212600000098'].human_handoff, false);
 assert.equal(dedupState.sessions['212600000098'].handoff_status, 'none');
 
 for (const result of results) console.log(`TEST ${result.number}: PASS - ${result.name}`);
-console.log('Additional normalization, verification, duplicate, and handoff checks: PASS');
+console.log('Additional normalization, four-product pricing, verification, duplicate, and handoff checks: PASS');
 rmSync(conversationStorePath, { force: true });
 rmSync(`${conversationStorePath}.lock`, { force: true });

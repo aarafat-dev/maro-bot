@@ -38,14 +38,13 @@ for (const path of ['data/products.example.json', 'data/products.json']) {
     assert.ok(existsSync(resolve(root, product.image_path)), `${product.id} image_path does not exist`);
     assert.ok(!imagePaths.has(product.image_path), `${product.id} reuses another product image`);
     imagePaths.add(product.image_path);
+    assert.deepEqual(product.sizes, ['S', 'M', 'L', 'XL']);
     if (['nike-double-face-jacket', 'cotton-montoni-tracksuit'].includes(product.id)) {
-      assert.deepEqual(product.sizes, ['S', 'M', 'L', 'XL']);
       assert.deepEqual(product.colors, ['Black', 'White']);
       assert.equal(product.delivery?.free, true);
       assert.ok(Number.isFinite(product.price) && product.price >= 0);
     } else {
-      assert.equal(product.price, null, `${product.id} price must remain unknown until confirmed`);
-      assert.deepEqual(product.sizes, [], `${product.id} sizes must remain unknown until confirmed`);
+      assert.equal(product.price, 219);
       assert.deepEqual(product.colors, ['Black']);
       assert.equal(product.material, null);
       assert.equal(product.delivery, null);
@@ -56,6 +55,8 @@ for (const path of ['data/products.example.json', 'data/products.json']) {
 const normalizedProducts = json('data/products.example.json');
 const nike = normalizedProducts.find((product) => product.id === 'nike-double-face-jacket');
 const montoni = normalizedProducts.find((product) => product.id === 'cotton-montoni-tracksuit');
+assert.equal(nike.price, 249);
+for (const product of normalizedProducts.filter((item) => item.id !== 'nike-double-face-jacket')) assert.equal(product.price, 219);
 for (const alias of ['nike', 'jaket nike', 'jacket nike', 'veste nike', 'nike jacket', 'nike double face', 'double face', 'jacket double face', 'جاكيط نايك', 'جاكيت نايك', 'نايك']) {
   assert.ok(nike.aliases.includes(alias), `Nike is missing alias: ${alias}`);
 }

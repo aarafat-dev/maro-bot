@@ -95,12 +95,17 @@
     "id": "nike-black-tracksuit",
     "name": "Black Nike-Style Tracksuit",
     "category": "clothing",
-    "price": null,
+    "price": 219,
     "currency": "MAD",
     "catalogued": true,
     "stock_status": "unknown",
     "stock": null,
-    "sizes": [],
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL"
+    ],
     "colors": [
       "Black"
     ],
@@ -124,12 +129,17 @@
     "id": "black-quarter-zip-tracksuit",
     "name": "Black Quarter-Zip Tracksuit",
     "category": "clothing",
-    "price": null,
+    "price": 219,
     "currency": "MAD",
     "catalogued": true,
     "stock_status": "unknown",
     "stock": null,
-    "sizes": [],
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL"
+    ],
     "colors": [
       "Black"
     ],
