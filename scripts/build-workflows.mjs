@@ -408,7 +408,7 @@ const products = productsFile.value
     id: String(product.id).slice(0, 120),
     name: String(product.name).slice(0, 240),
     category: String(product.category || '').slice(0, 120),
-    price: Number(product.price),
+    price: product.price === null || product.price === undefined ? null : Number(product.price),
     currency: String(product.currency || config.currency || 'MAD').slice(0, 12),
     catalogued: product.catalogued !== false,
     stock_status: ['in_stock', 'out_of_stock', 'unknown'].includes(product.stock_status)
@@ -434,6 +434,9 @@ const products = productsFile.value
           inspect_before_payment: product.payment.inspect_before_payment === true,
           description: String(product.payment.description || '').slice(0, 300),
         }
+      : null,
+    image_path: typeof product.image_path === 'string' && /^data\/products-images\/[A-Za-z0-9._-]+\.(?:jpe?g|png|webp)$/i.test(product.image_path)
+      ? product.image_path.slice(0, 500)
       : null,
     media: product.media && typeof product.media === 'object'
       ? {

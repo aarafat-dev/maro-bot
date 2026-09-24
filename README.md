@@ -162,7 +162,9 @@ Edit `data/products.json`; keep `data/products.example.json` aligned for tests a
 
 Matching lowercases text, removes basic punctuation/diacritics, collapses whitespace, and compares product names and aliases. Do not add speculative colors, materials, stock, promotions, or sizing advice. When more than one product is plausibly named and the message is not a comparison, the bot asks which product the customer means.
 
-The store scope is four products, but the repository currently contains confirmed structured facts for only two: `nike-double-face-jacket` and `cotton-montoni-tracksuit`. Products 3 and 4 are intentionally absent until their identities and facts are supplied; the bot must not manufacture placeholder catalogue items. Both confirmed records distinguish `catalogued: true` from `stock_status: "unknown"` and list Black/White variants.
+The store scope is four products. All four confirmed identities and their existing local catalog image paths are recorded. Complete commerce facts currently exist only for `nike-double-face-jacket` and `cotton-montoni-tracksuit`; products 3 and 4 keep unknown price, size, material, delivery, and payment fields as `null`/empty values instead of fabricated facts. The runtime loader excludes incomplete products from customer-facing sales routing until those required facts are confirmed.
+
+Catalog images remain under `data/products-images/` and are referenced through each product's `image_path`. These paths are catalog metadata only: they are not Meta Media IDs, are not uploaded automatically, and do not enable customer-image recognition. Outgoing product media still requires separately configured approved HTTPS entries under `media.images`.
 
 The router emits one of three internal outcomes:
 
@@ -196,7 +198,7 @@ Compatibility fields `language`, `last_seen`, and `human_handoff` remain mirrore
 
 ## Incoming images (V1)
 
-Images are never downloaded, recognized, or sent to Workers AI. The workflow does not persist or map Meta Media IDs because re-uploads can receive different IDs and they are not durable product identifiers. Without current product context, the bot asks whether the customer means Jaket Nike Double Face or Top Coton Montoni. With recent context, it asks whether the image question concerns that known product without claiming it identified the image.
+Customer-uploaded images are never downloaded, recognized, or sent to Workers AI. The workflow does not persist or map incoming Meta Media IDs because re-uploads can receive different IDs and they are not durable product identifiers. Existing files under `data/products-images/` are trusted catalog assets referenced by `image_path`; they are not used for vision inference or uploaded to Meta automatically. With recent context, the bot may ask whether an incoming image question concerns that known product without claiming it identified the image.
 
 The normalization/router boundary leaves room for a future explicitly authorized vision service without changing webhook, deduplication, state, or send nodes.
 

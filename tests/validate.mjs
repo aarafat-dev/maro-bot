@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import assert from 'node:assert/strict';
 
@@ -17,22 +17,40 @@ for (const path of jsonFiles) assert.doesNotThrow(() => json(path), `${path} mus
 
 for (const path of ['data/products.example.json', 'data/products.json']) {
   const products = json(path);
-  assert.equal(products.length, 2, `${path} currently has exactly two confirmed products; unconfirmed products must not be fabricated`);
-  assert.ok(products.length <= 4, `${path} must never exceed this store's four-product scope`);
-  assert.deepEqual(products.map((product) => product.id), ['nike-double-face-jacket', 'cotton-montoni-tracksuit']);
+  assert.equal(products.length, 4, `${path} must contain the store's four catalog identities`);
+  assert.deepEqual(products.map((product) => product.id), [
+    'nike-double-face-jacket',
+    'cotton-montoni-tracksuit',
+    'nike-black-tracksuit',
+    'black-quarter-zip-tracksuit',
+  ]);
+  const imagePaths = new Set();
   for (const product of products) {
-    for (const key of ['id', 'name', 'category', 'price', 'currency', 'catalogued', 'stock_status', 'stock', 'sizes', 'colors', 'features', 'media', 'aliases']) {
+    for (const key of ['id', 'name', 'category', 'price', 'currency', 'catalogued', 'stock_status', 'stock', 'sizes', 'colors', 'features', 'image_path', 'media', 'aliases']) {
       assert.ok(Object.hasOwn(product, key), `${product.id} is missing ${key}`);
     }
     assert.equal(product.catalogued, true);
     assert.equal(product.stock_status, 'unknown');
     assert.equal(product.stock, null);
-    assert.deepEqual(product.sizes, ['S', 'M', 'L', 'XL']);
-    assert.deepEqual(product.colors, ['Black', 'White']);
     assert.deepEqual(product.media, { images: [] });
-    assert.ok(product.aliases.length >= 5, `${product.id} needs data-driven multilingual aliases`);
-    assert.equal(product.delivery?.free, true);
-    assert.ok(Number.isFinite(product.price) && product.price >= 0);
+    assert.ok(product.aliases.length >= 3, `${product.id} needs data-driven aliases`);
+    assert.match(product.image_path, /^data\/products-images\/[A-Za-z0-9._-]+\.jpg$/);
+    assert.ok(existsSync(resolve(root, product.image_path)), `${product.id} image_path does not exist`);
+    assert.ok(!imagePaths.has(product.image_path), `${product.id} reuses another product image`);
+    imagePaths.add(product.image_path);
+    if (['nike-double-face-jacket', 'cotton-montoni-tracksuit'].includes(product.id)) {
+      assert.deepEqual(product.sizes, ['S', 'M', 'L', 'XL']);
+      assert.deepEqual(product.colors, ['Black', 'White']);
+      assert.equal(product.delivery?.free, true);
+      assert.ok(Number.isFinite(product.price) && product.price >= 0);
+    } else {
+      assert.equal(product.price, null, `${product.id} price must remain unknown until confirmed`);
+      assert.deepEqual(product.sizes, [], `${product.id} sizes must remain unknown until confirmed`);
+      assert.deepEqual(product.colors, ['Black']);
+      assert.equal(product.material, null);
+      assert.equal(product.delivery, null);
+      assert.equal(product.payment, null);
+    }
   }
 }
 const normalizedProducts = json('data/products.example.json');

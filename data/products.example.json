@@ -20,6 +20,7 @@
       "description": "Free delivery to customer's door."
     },
     "payment": null,
+    "image_path": "data/products-images/jacket-nike-double-face.jpg",
     "media": {
       "images": []
     },
@@ -62,6 +63,7 @@
       "inspect_before_payment": true,
       "description": "Customer can inspect/check the product before paying."
     },
+    "image_path": "data/products-images/survette-blanche.jpg",
     "media": {
       "images": []
     },
@@ -87,6 +89,64 @@
       "قطن",
       "سورفيت",
       "سورفيت نوار"
+    ]
+  },
+  {
+    "id": "nike-black-tracksuit",
+    "name": "Black Nike-Style Tracksuit",
+    "category": "clothing",
+    "price": null,
+    "currency": "MAD",
+    "catalogued": true,
+    "stock_status": "unknown",
+    "stock": null,
+    "sizes": [],
+    "colors": [
+      "Black"
+    ],
+    "material": null,
+    "features": [
+      "black Nike-style tracksuit with white piping"
+    ],
+    "delivery": null,
+    "payment": null,
+    "image_path": "data/products-images/survette-nike-noir.jpg",
+    "media": {
+      "images": []
+    },
+    "aliases": [
+      "nike black tracksuit",
+      "black nike tracksuit",
+      "survette nike noir"
+    ]
+  },
+  {
+    "id": "black-quarter-zip-tracksuit",
+    "name": "Black Quarter-Zip Tracksuit",
+    "category": "clothing",
+    "price": null,
+    "currency": "MAD",
+    "catalogued": true,
+    "stock_status": "unknown",
+    "stock": null,
+    "sizes": [],
+    "colors": [
+      "Black"
+    ],
+    "material": null,
+    "features": [
+      "plain black quarter-zip / high-collar tracksuit"
+    ],
+    "delivery": null,
+    "payment": null,
+    "image_path": "data/products-images/survette-noir.jpg",
+    "media": {
+      "images": []
+    },
+    "aliases": [
+      "black quarter zip tracksuit",
+      "quarter zip tracksuit",
+      "high collar tracksuit"
     ]
   }
 ]
