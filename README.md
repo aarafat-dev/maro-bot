@@ -2,6 +2,8 @@
 
 A production-oriented, low-cost WhatsApp sales assistant built with n8n, Meta WhatsApp Cloud API, structured store data, and Cloudflare Workers AI as a narrowly gated fallback.
 
+It also supports progressive multi-message order collection, explicit final confirmation, durable local order persistence, idempotent owner notification, and protected human takeover. See [Orders and takeover](docs/orders.md).
+
 The catalogue and store JSON files are authoritative. Greetings, prices, sizes, delivery, known payment facts, obvious product questions, images, irrelevant requests, and security probes are handled without AI. Workers AI is called only when a store-related question genuinely needs language interpretation.
 
 ## Message flow
@@ -13,6 +15,7 @@ Meta WhatsApp
   → input normalization and length cap
   → duplicate + handoff guard
   → read-only store data
+  → deterministic order state machine and durable draft/confirmation storage
   → deterministic security, relevance, intent, and alias matching
       ├─ answer known fact directly (response_source=deterministic)
       ├─ reject irrelevant/adversarial input directly
@@ -66,9 +69,16 @@ docker compose logs --tail=100 n8n
 | `WHATSAPP_ACCESS_TOKEN` | Meta System User token or temporary test token. |
 | `WHATSAPP_PHONE_NUMBER_ID` | Meta sender resource ID. |
 | `WHATSAPP_BUSINESS_ACCOUNT_ID` | WABA ID. |
+| `WHATSAPP_BUSINESS_PHONE` | Actual sender number; prevents owner alerts targeting the sender itself. |
 | `WHATSAPP_VERIFY_TOKEN` | Private webhook verification value. |
 | `WHATSAPP_APP_SECRET` | Verifies `X-Hub-Signature-256`. |
-| `HANDOFF_ADMIN_TOKEN` | Protects the clear-handoff endpoint. |
+| `HANDOFF_ADMIN_TOKEN` | Protects takeover, order-inspection, retry, and test-reset endpoints. |
+| `STORE_OWNER_WHATSAPP` | Separate owner/admin recipient for confirmed-order alerts. |
+| `HUMAN_TAKEOVER_MINUTES` | Protected manual-takeover duration. |
+| `CONVERSATION_CONTEXT_TTL_MINUTES` | Fresh FAQ, product, and pending-question context lifetime. |
+| `ORDER_DRAFT_TTL_MINUTES` | Maximum idle age for active drafts before they become `ABANDONED`. |
+| `ORDER_PHONE_SOURCE` | Customer-phone preference policy. |
+| `ORDER_STORE_PATH` | Durable order JSON path inside `n8n_data`. |
 | `CLOUDFLARE_ACCOUNT_ID` | Account that owns Workers AI usage. |
 | `CLOUDFLARE_API_TOKEN` | Dedicated Workers AI API token. |
 | `CLOUDFLARE_AI_MODEL` | Configurable Cloudflare model identifier. |
@@ -164,19 +174,25 @@ Color aliases are normalized deterministically to `Black` or `White`. Unsupporte
 
 ## Conversation context
 
-The workflow stores only lightweight structured state per phone number:
+The workflow stores lightweight structured state per phone number in the same atomically written persistent file as draft orders:
 
 ```text
 preferred_language
+conversation_mode
+pending_action
+pending_field / pending_fields
+pending_product_id / pending_order_id
+last_bot_action / last_bot_question
 last_intent
 last_product_id
 last_product_at
 last_requested_color
+active_order_id / order_status
 handoff_status
 last_activity_at
 ```
 
-Compatibility fields `language`, `last_seen`, and `human_handoff` remain present for existing workflow state. `last_product_id` and its color context expire for routing after 24 hours. Sessions are pruned after 90 days and processed message IDs after seven days. Customer message history is not forwarded to AI or retained as an unbounded transcript. This lets `taman nike` followed by `w tailles?`, or `survette noir` followed by `w lbyed?`, resolve consistently.
+Compatibility fields `language`, `last_seen`, and `human_handoff` remain mirrored in workflow static data. FAQ/product/pending context expires according to `CONVERSATION_CONTEXT_TTL_MINUTES` (default 1,440 minutes). Active drafts are durable but expire independently after `ORDER_DRAFT_TTL_MINUTES` (default 1,440 minutes); they remain in history as `ABANDONED` and are removed from conversational routing. Atomic patch/merge writes prevent absent fields in a new message from erasing previously collected values. Customer message history is not retained as an unbounded transcript or forwarded to AI.
 
 ## Incoming images (V1)
 
@@ -200,12 +216,24 @@ All routing and provider-failure tests are offline and require no credentials:
 npm test
 ```
 
-The suite regenerates both workflow exports, validates every embedded Code node, checks for committed secret patterns, and exercises all 22 routing scenarios, including language persistence, colors, images, follow-up product context, the AI gate, 429, and 5xx responses.
+The suite regenerates both workflow exports, validates every embedded Code node, checks for committed secret patterns, and exercises 22 FAQ/routing scenarios, 25 order scenarios, and the state-first multi-turn context regressions. It includes pending questions, multiline/rapid slot merging, FAQ↔order transitions, language persistence, the AI gate, 429/5xx handling, order idempotency, and human takeover.
 
 Run only routing scenarios:
 
 ```bash
 npm run test:scenarios
+```
+
+Run only real-conversation order scenarios:
+
+```bash
+npm run test:orders
+```
+
+Run only context/state regressions:
+
+```bash
+npm run test:context
 ```
 
 After importing and activating the workflow, simulate a signed Meta webhook:
@@ -238,6 +266,12 @@ scripts/clear-handoff.sh 2126XXXXXXXX https://YOUR_BOT_DOMAIN
 
 Protect the admin path at the network layer and keep `HANDOFF_ADMIN_TOKEN` independent from every other secret.
 
+To clear FAQ context and detach/abandon only the active draft for one development test number, while preserving historical orders:
+
+```bash
+scripts/reset-conversation.sh 2126XXXXXXXX https://YOUR_BOT_DOMAIN
+```
+
 ## Replacing Cloudflare later
 
 Provider-specific logic is isolated to three nodes generated by `scripts/build-workflows.mjs`:
@@ -265,3 +299,4 @@ More detail:
 - [Meta WhatsApp setup](docs/meta-whatsapp-setup.md)
 - [n8n operation](docs/n8n-setup.md)
 - [Credential handling](n8n/credentials-notes.md)
+- [Orders, owner notifications, and takeover](docs/orders.md)

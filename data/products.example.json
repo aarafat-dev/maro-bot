@@ -20,6 +20,9 @@
       "description": "Free delivery to customer's door."
     },
     "payment": null,
+    "media": {
+      "images": []
+    },
     "aliases": [
       "nike",
       "jaket nike",
@@ -58,6 +61,9 @@
     "payment": {
       "inspect_before_payment": true,
       "description": "Customer can inspect/check the product before paying."
+    },
+    "media": {
+      "images": []
     },
     "aliases": [
       "survette",

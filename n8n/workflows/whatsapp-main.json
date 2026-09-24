@@ -75,7 +75,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const crypto = require('crypto');\nconst headers = Object.fromEntries(\n  Object.entries($json.headers || {}).map(([key, value]) => [key.toLowerCase(), String(value)]),\n);\nconst expected = String($env.HANDOFF_ADMIN_TOKEN || '');\nconst supplied = String(headers['x-handoff-admin-token'] || '');\nconst expectedBuffer = Buffer.from(expected);\nconst suppliedBuffer = Buffer.from(supplied);\nconst authorized = expected.length >= 24\n  && expectedBuffer.length === suppliedBuffer.length\n  && crypto.timingSafeEqual(expectedBuffer, suppliedBuffer);\nif (!authorized) {\n  return [{ json: { status_code: 401, response_body: JSON.stringify({ ok: false, error: 'unauthorized' }) } }];\n}\n\nconst phone = String($json.body?.phone_number || '').replace(/[^0-9]/g, '');\nif (!phone) {\n  return [{ json: { status_code: 400, response_body: JSON.stringify({ ok: false, error: 'phone_number_required' }) } }];\n}\nconst state = $getWorkflowStaticData('global');\nstate.sessions = state.sessions || {};\nif (!state.sessions[phone]) {\n  return [{ json: { status_code: 404, response_body: JSON.stringify({ ok: false, error: 'session_not_found' }) } }];\n}\nstate.sessions[phone].human_handoff = false;\nstate.sessions[phone].handoff_status = 'none';\nstate.sessions[phone].last_activity_at = new Date().toISOString();\nstate.sessions[phone].last_seen = new Date().toISOString();\nreturn [{ json: { status_code: 200, response_body: JSON.stringify({ ok: true, phone_number: phone, human_handoff: false }) } }];"
+        "jsCode": "const crypto = require('crypto');\nconst headers = Object.fromEntries(\n  Object.entries($json.headers || {}).map(([key, value]) => [key.toLowerCase(), String(value)]),\n);\nconst expected = String($env.HANDOFF_ADMIN_TOKEN || '');\nconst supplied = String(headers['x-handoff-admin-token'] || '');\nconst expectedBuffer = Buffer.from(expected);\nconst suppliedBuffer = Buffer.from(supplied);\nconst authorized = expected.length >= 24\n  && expectedBuffer.length === suppliedBuffer.length\n  && crypto.timingSafeEqual(expectedBuffer, suppliedBuffer);\nif (!authorized) {\n  return [{ json: { status_code: 401, response_body: JSON.stringify({ ok: false, error: 'unauthorized' }) } }];\n}\n\nconst phone = String($json.body?.phone_number || '').replace(/[^0-9]/g, '');\nif (!phone) {\n  return [{ json: { status_code: 400, response_body: JSON.stringify({ ok: false, error: 'phone_number_required' }) } }];\n}\nconst state = $getWorkflowStaticData('global');\nstate.sessions = state.sessions || {};\nif (!state.sessions[phone]) {\n  return [{ json: { status_code: 404, response_body: JSON.stringify({ ok: false, error: 'session_not_found' }) } }];\n}\nstate.sessions[phone].human_handoff = false;\nstate.sessions[phone].handoff_status = 'none';\nstate.sessions[phone].handoff_until = null;\nstate.sessions[phone].automation_enabled = true;\nstate.sessions[phone].last_activity_at = new Date().toISOString();\nstate.sessions[phone].last_seen = new Date().toISOString();\nreturn [{ json: { status_code: 200, response_body: JSON.stringify({ ok: true, phone_number: phone, human_handoff: false }) } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -110,6 +110,226 @@
       ],
       "id": "1a3d3a10-0033-4b11-8001-000000000033",
       "name": "Return Handoff Admin Result"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp/admin/start-handoff",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1220,
+        660
+      ],
+      "id": "1a3d3a10-0050-4b11-8001-000000000050",
+      "name": "Start Handoff Admin Webhook",
+      "webhookId": "whatsapp-start-handoff-admin"
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst headers = Object.fromEntries(\n  Object.entries($json.headers || {}).map(([key, value]) => [key.toLowerCase(), String(value)]),\n);\nconst expected = String($env.HANDOFF_ADMIN_TOKEN || '');\nconst supplied = String(headers['x-handoff-admin-token'] || '');\nconst authorized = expected.length >= 24\n  && Buffer.byteLength(expected) === Buffer.byteLength(supplied)\n  && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(supplied));\nif (!authorized) {\n  return [{ json: { status_code: 401, response_body: JSON.stringify({ ok: false, error: 'unauthorized' }) } }];\n}\nconst phone = String($json.body?.phone_number || '').replace(/[^0-9]/g, '');\nif (!phone) {\n  return [{ json: { status_code: 400, response_body: JSON.stringify({ ok: false, error: 'phone_number_required' }) } }];\n}\nconst configuredMinutes = Number($json.body?.minutes || $env.HUMAN_TAKEOVER_MINUTES || 60);\nconst minutes = Number.isFinite(configuredMinutes) ? Math.min(1440, Math.max(5, Math.floor(configuredMinutes))) : 60;\nconst now = new Date();\nconst until = new Date(now.getTime() + minutes * 60 * 1000).toISOString();\nconst state = $getWorkflowStaticData('global');\nstate.sessions = state.sessions || {};\nconst existing = state.sessions[phone] || {};\nstate.sessions[phone] = {\n  ...existing,\n  automation_enabled: false,\n  human_handoff: true,\n  handoff_status: 'active',\n  handoff_until: until,\n  last_activity_at: now.toISOString(),\n  last_seen: now.toISOString(),\n};\nreturn [{ json: { status_code: 200, response_body: JSON.stringify({ ok: true, phone_number: phone, handoff_status: 'active', handoff_until: until }) } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -980,
+        660
+      ],
+      "id": "1a3d3a10-0051-4b11-8001-000000000051",
+      "name": "Authorize and Start Handoff"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.response_body }}",
+        "options": {
+          "responseCode": "={{ $json.status_code }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -740,
+        660
+      ],
+      "id": "1a3d3a10-0052-4b11-8001-000000000052",
+      "name": "Return Start Handoff Result"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "whatsapp/admin/orders",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1220,
+        820
+      ],
+      "id": "1a3d3a10-0053-4b11-8001-000000000053",
+      "name": "Orders Admin Webhook",
+      "webhookId": "whatsapp-orders-admin"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst crypto = require('crypto');\nconst headers = Object.fromEntries(\n  Object.entries($json.headers || {}).map(([key, value]) => [key.toLowerCase(), String(value)]),\n);\nconst expected = String($env.HANDOFF_ADMIN_TOKEN || '');\nconst supplied = String(headers['x-handoff-admin-token'] || '');\nconst authorized = expected.length >= 24\n  && Buffer.byteLength(expected) === Buffer.byteLength(supplied)\n  && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(supplied));\nif (!authorized) {\n  return [{ json: { status_code: 401, response_body: JSON.stringify({ ok: false, error: 'unauthorized' }) } }];\n}\nconst storePath = String($env.ORDER_STORE_PATH || '/home/node/.n8n/whatsapp-orders.json');\nlet store = { version: 1, orders: {} };\ntry {\n  if (fs.existsSync(storePath)) store = JSON.parse(fs.readFileSync(storePath, 'utf8'));\n} catch (_) {\n  return [{ json: { status_code: 500, response_body: JSON.stringify({ ok: false, error: 'order_store_unreadable' }) } }];\n}\nconst requestedLimit = Number($json.query?.limit || 50);\nconst limit = Number.isFinite(requestedLimit) ? Math.min(200, Math.max(1, Math.floor(requestedLimit))) : 50;\nconst status = String($json.query?.status || '').toUpperCase();\nconst orders = Object.values(store.orders || {})\n  .filter((order) => !status || order.status === status)\n  .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))\n  .slice(0, limit);\nreturn [{ json: { status_code: 200, response_body: JSON.stringify({ ok: true, count: orders.length, orders }) } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -980,
+        820
+      ],
+      "id": "1a3d3a10-0054-4b11-8001-000000000054",
+      "name": "Authorize and Inspect Orders"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.response_body }}",
+        "options": {
+          "responseCode": "={{ $json.status_code }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -740,
+        820
+      ],
+      "id": "1a3d3a10-0055-4b11-8001-000000000055",
+      "name": "Return Orders Result"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp/admin/retry-owner-notification",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1220,
+        980
+      ],
+      "id": "1a3d3a10-0056-4b11-8001-000000000056",
+      "name": "Retry Owner Notification Webhook",
+      "webhookId": "whatsapp-retry-owner-notification"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst crypto = require('crypto');\nconst headers = Object.fromEntries(Object.entries($json.headers || {}).map(([key, value]) => [key.toLowerCase(), String(value)]));\nconst expected = String($env.HANDOFF_ADMIN_TOKEN || '');\nconst supplied = String(headers['x-handoff-admin-token'] || '');\nconst authorized = expected.length >= 24\n  && Buffer.byteLength(expected) === Buffer.byteLength(supplied)\n  && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(supplied));\nif (!authorized) return [{ json: { status_code: 401, response_body: JSON.stringify({ ok: false, error: 'unauthorized' }), owner_notification_required: false } }];\nconst orderId = String($json.body?.order_id || '').trim();\nif (!/^ORD-[A-Z0-9-]{12,}$/i.test(orderId)) return [{ json: { status_code: 400, response_body: JSON.stringify({ ok: false, error: 'valid_order_id_required' }), owner_notification_required: false } }];\nconst storePath = String($env.ORDER_STORE_PATH || '/home/node/.n8n/whatsapp-orders.json');\nlet order = null;\ntry {\n  const store = fs.existsSync(storePath) ? JSON.parse(fs.readFileSync(storePath, 'utf8')) : { orders: {} };\n  order = store.orders?.[orderId] || null;\n} catch (_) {}\nif (!order) return [{ json: { status_code: 404, response_body: JSON.stringify({ ok: false, error: 'order_not_found' }), owner_notification_required: false } }];\nif (order.status !== 'CONFIRMED' || !['PENDING', 'FAILED'].includes(order.notification_status) || Number(order.notification_attempts || 0) >= 2) {\n  return [{ json: { status_code: 409, response_body: JSON.stringify({ ok: false, error: 'notification_not_retryable', status: order.status, notification_status: order.notification_status, attempts: order.notification_attempts || 0 }), owner_notification_required: false } }];\n}\nreturn [{ json: {\n  status_code: 202,\n  response_body: JSON.stringify({ ok: true, order_id: orderId, retry: 'accepted' }),\n  owner_notification_required: true,\n  owner_notification_kind: 'order',\n  owner_notification_key: orderId,\n  owner_notification_text: order.owner_notification_text,\n  order_id: orderId,\n  admin_notification_retry: true,\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -980,
+        980
+      ],
+      "id": "1a3d3a10-0057-4b11-8001-000000000057",
+      "name": "Authorize Notification Retry"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.response_body }}",
+        "options": {
+          "responseCode": "={{ $json.status_code }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -740,
+        980
+      ],
+      "id": "1a3d3a10-0058-4b11-8001-000000000058",
+      "name": "Return Notification Retry Result"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp/admin/reset-conversation",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1220,
+        1140
+      ],
+      "id": "1a3d3a10-0059-4b11-8001-000000000059",
+      "name": "Reset Conversation Admin Webhook",
+      "webhookId": "whatsapp-reset-conversation-admin"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst crypto = require('crypto');\nconst headers = Object.fromEntries(Object.entries($json.headers || {}).map(([key, value]) => [key.toLowerCase(), String(value)]));\nconst expected = String($env.HANDOFF_ADMIN_TOKEN || '');\nconst supplied = String(headers['x-handoff-admin-token'] || '');\nconst authorized = expected.length >= 24\n  && Buffer.byteLength(expected) === Buffer.byteLength(supplied)\n  && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(supplied));\nif (!authorized) return [{ json: { status_code: 401, response_body: JSON.stringify({ ok: false, error: 'unauthorized' }) } }];\nconst phone = String($json.body?.phone_number || '').replace(/[^0-9]/g, '');\nif (!phone) return [{ json: { status_code: 400, response_body: JSON.stringify({ ok: false, error: 'phone_number_required' }) } }];\nconst storePath = String($env.ORDER_STORE_PATH || '/home/node/.n8n/whatsapp-orders.json');\nconst lockPath = storePath + '.lock';\nlet descriptor = null;\nfor (let attempt = 0; attempt < 80; attempt += 1) {\n  try { descriptor = fs.openSync(lockPath, 'wx', 0o600); break; }\n  catch (error) {\n    if (error.code !== 'EEXIST') throw error;\n    try { if (Date.now() - fs.statSync(lockPath).mtimeMs > 30000) fs.unlinkSync(lockPath); } catch (_) {}\n    await new Promise((resolve) => setTimeout(resolve, 25));\n  }\n}\nif (descriptor === null) return [{ json: { status_code: 503, response_body: JSON.stringify({ ok: false, error: 'order_store_lock_timeout' }) } }];\nlet abandonedOrderId = null;\ntry {\n  const store = fs.existsSync(storePath) ? JSON.parse(fs.readFileSync(storePath, 'utf8')) : {};\n  store.orders ||= {}; store.active_orders_by_customer ||= {}; store.conversations ||= {};\n  const activeId = store.active_orders_by_customer[phone] || store.conversations[phone]?.active_order_id || null;\n  const order = activeId ? store.orders[activeId] : null;\n  if (order && ['COLLECTING', 'AWAITING_CONFIRMATION', 'HANDOFF'].includes(order.status)) {\n    const now = new Date().toISOString();\n    order.status = 'ABANDONED'; order.abandoned_at = now; order.abandonment_reason = 'admin_test_reset'; order.updated_at = now;\n    abandonedOrderId = order.order_id;\n  }\n  delete store.active_orders_by_customer[phone];\n  delete store.conversations[phone];\n  const separator = storePath.lastIndexOf('/');\n  if (separator > 0) fs.mkdirSync(storePath.slice(0, separator), { recursive: true });\n  const temporary = storePath + '.tmp-' + crypto.randomBytes(8).toString('hex');\n  fs.writeFileSync(temporary, JSON.stringify(store, null, 2) + '\\n', { encoding: 'utf8', mode: 0o600 });\n  fs.renameSync(temporary, storePath);\n} finally {\n  try { fs.closeSync(descriptor); } catch (_) {}\n  try { fs.unlinkSync(lockPath); } catch (_) {}\n}\nconst state = $getWorkflowStaticData('global');\nstate.sessions ||= {};\ndelete state.sessions[phone];\nreturn [{ json: { status_code: 200, response_body: JSON.stringify({ ok: true, phone_number: phone, active_draft_status: abandonedOrderId ? 'ABANDONED' : 'NONE', abandoned_order_id: abandonedOrderId, historical_orders_preserved: true }) } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -980,
+        1140
+      ],
+      "id": "1a3d3a10-0060-4b11-8001-000000000060",
+      "name": "Authorize and Reset Conversation"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.response_body }}",
+        "options": {
+          "responseCode": "={{ $json.status_code }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -740,
+        1140
+      ],
+      "id": "1a3d3a10-0061-4b11-8001-000000000061",
+      "name": "Return Reset Conversation Result"
     },
     {
       "parameters": {
@@ -204,7 +424,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const payload = $json.body || {};\nconst value = payload.entry?.[0]?.changes?.[0]?.value || {};\nconst message = value.messages?.[0];\nif (!message) return [{ json: { supported: false, ignore_reason: 'not_a_message_event' } }];\n\nlet text = '';\nif (message.type === 'text') text = message.text?.body || '';\nif (message.type === 'button') text = message.button?.text || '';\nif (message.type === 'interactive') {\n  text = message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || '';\n}\nif (message.type === 'image') text = message.image?.caption || '';\n\nconst cleanedText = String(text)\n  .replace(/[\\u0000-\\u001F\\u007F]/g, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim();\nconst maxInputCharacters = 1000;\nconst supportedTypes = ['text', 'button', 'interactive', 'image'];\ntext = cleanedText.slice(0, maxInputCharacters);\n\nreturn [{\n  json: {\n    supported: supportedTypes.includes(message.type) && (message.type === 'image' || Boolean(text)),\n    ignore_reason: supportedTypes.includes(message.type) ? null : 'unsupported_message_type',\n    phone_number: String(message.from || value.contacts?.[0]?.wa_id || ''),\n    message_id: String(message.id || ''),\n    message_text: text,\n    input_truncated: cleanedText.length > maxInputCharacters,\n    message_type: String(message.type || ''),\n    timestamp: message.timestamp\n      ? new Date(Number(message.timestamp) * 1000).toISOString()\n      : new Date().toISOString(),\n    phone_number_id: String(value.metadata?.phone_number_id || ''),\n  },\n}];"
+        "jsCode": "const payload = $json.body || {};\nconst value = payload.entry?.[0]?.changes?.[0]?.value || {};\nconst message = value.messages?.[0];\nif (!message) return [{ json: { supported: false, ignore_reason: 'not_a_message_event' } }];\n\nlet text = '';\nif (message.type === 'text') text = message.text?.body || '';\nif (message.type === 'button') text = message.button?.text || '';\nif (message.type === 'interactive') {\n  text = message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || '';\n}\nif (message.type === 'image') text = message.image?.caption || '';\n\nconst cleanedText = String(text)\n  .replace(/\\r\\n?/g, '\\n')\n  .replace(/[\\u0000-\\u0009\\u000B-\\u001F\\u007F]/g, ' ')\n  .split('\\n')\n  .map((line) => line.replace(/[ \\t]+/g, ' ').trim())\n  .filter(Boolean)\n  .join('\\n')\n  .trim();\nconst maxInputCharacters = 1000;\nconst supportedTypes = ['text', 'button', 'interactive', 'image'];\ntext = cleanedText.slice(0, maxInputCharacters);\n\nreturn [{\n  json: {\n    supported: supportedTypes.includes(message.type) && (message.type === 'image' || Boolean(text)),\n    ignore_reason: supportedTypes.includes(message.type) ? null : 'unsupported_message_type',\n    phone_number: String(message.from || value.contacts?.[0]?.wa_id || ''),\n    message_id: String(message.id || ''),\n    message_text: text,\n    input_truncated: cleanedText.length > maxInputCharacters,\n    message_type: String(message.type || ''),\n    timestamp: message.timestamp\n      ? new Date(Number(message.timestamp) * 1000).toISOString()\n      : new Date().toISOString(),\n    phone_number_id: String(value.metadata?.phone_number_id || ''),\n  },\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -251,7 +471,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const state = $getWorkflowStaticData('global');\nstate.sessions = state.sessions || {};\nstate.processed_message_ids = state.processed_message_ids || {};\n\nconst now = Date.now();\nconst processedTtlMs = 7 * 24 * 60 * 60 * 1000;\nconst sessionTtlMs = 90 * 24 * 60 * 60 * 1000;\nconst productContextTtlMs = 24 * 60 * 60 * 1000;\nfor (const [messageId, record] of Object.entries(state.processed_message_ids)) {\n  const timestamp = Number(record?.processed_at || record?.received_at || 0);\n  if (!timestamp || now - timestamp > processedTtlMs) delete state.processed_message_ids[messageId];\n}\nfor (const [phone, session] of Object.entries(state.sessions)) {\n  const timestamp = Date.parse(session?.last_activity_at || session?.last_seen || '');\n  if (!Number.isFinite(timestamp) || now - timestamp > sessionTtlMs) delete state.sessions[phone];\n}\n\nconst phone = String($json.phone_number || '');\nconst messageId = String($json.message_id || '');\nconst existing = state.sessions[phone] || {};\nconst lastProductAt = Date.parse(existing.last_product_at || '');\nconst activeLastProductId = existing.last_product_id\n  && Number.isFinite(lastProductAt)\n  && now - lastProductAt <= productContextTtlMs\n    ? String(existing.last_product_id)\n    : null;\n\nlet skipReason = null;\nif (!phone || !messageId) skipReason = 'missing_message_identity';\nelse if (state.processed_message_ids[messageId]) skipReason = 'duplicate_message_id';\nelse if (existing.human_handoff || existing.handoff_status === 'active') skipReason = 'human_handoff_active';\n\nif (messageId && !state.processed_message_ids[messageId]) {\n  state.processed_message_ids[messageId] = {\n    received_at: now,\n    phone_number: phone,\n    status: skipReason === 'human_handoff_active' ? 'routed_to_human' : 'processing',\n  };\n}\nif (skipReason === 'human_handoff_active') {\n  existing.last_activity_at = new Date(now).toISOString();\n  existing.last_seen = new Date(now).toISOString();\n  state.sessions[phone] = existing;\n}\n\nreturn [{\n  json: {\n    ...$json,\n    should_process: !skipReason,\n    skip_reason: skipReason,\n    session: {\n      preferred_language: existing.preferred_language || existing.language || 'unknown',\n      language: existing.preferred_language || existing.language || 'unknown',\n      last_intent: existing.last_intent || null,\n      last_product_id: activeLastProductId,\n      last_product_at: activeLastProductId ? existing.last_product_at : null,\n      last_requested_color: activeLastProductId ? (existing.last_requested_color || null) : null,\n      handoff_status: existing.handoff_status || (existing.human_handoff ? 'active' : 'none'),\n      human_handoff: Boolean(existing.human_handoff || existing.handoff_status === 'active'),\n      last_activity_at: existing.last_activity_at || existing.last_seen || null,\n    },\n  },\n}];"
+        "jsCode": "const fs = require('fs');\nconst state = $getWorkflowStaticData('global');\nstate.sessions = state.sessions || {};\nstate.processed_message_ids = state.processed_message_ids || {};\n\nconst now = Date.now();\nstate.state_event_sequence = (Number(state.state_event_sequence || 0) + 1) % 1000;\nconst stateEventAt = now * 1000 + state.state_event_sequence;\nconst processedTtlMs = 7 * 24 * 60 * 60 * 1000;\nconst sessionTtlMs = 90 * 24 * 60 * 60 * 1000;\nconst configuredContextMinutes = Number($env.CONVERSATION_CONTEXT_TTL_MINUTES || 1440);\nconst contextMinutes = Number.isFinite(configuredContextMinutes) ? Math.min(10080, Math.max(5, Math.floor(configuredContextMinutes))) : 1440;\nconst productContextTtlMs = contextMinutes * 60 * 1000;\nconst configuredDraftMinutes = Number($env.ORDER_DRAFT_TTL_MINUTES || 1440);\nconst draftTtlMinutes = Number.isFinite(configuredDraftMinutes) ? Math.min(43200, Math.max(5, Math.floor(configuredDraftMinutes))) : 1440;\nconst draftTtlMs = draftTtlMinutes * 60 * 1000;\nfor (const [messageId, record] of Object.entries(state.processed_message_ids)) {\n  const timestamp = Number(record?.processed_at || record?.received_at || 0);\n  if (!timestamp || now - timestamp > processedTtlMs) delete state.processed_message_ids[messageId];\n}\nfor (const [phone, session] of Object.entries(state.sessions)) {\n  const timestamp = Date.parse(session?.last_activity_at || session?.last_seen || '');\n  if (!Number.isFinite(timestamp) || now - timestamp > sessionTtlMs) delete state.sessions[phone];\n}\n\nconst phone = String($json.phone_number || '');\nconst messageId = String($json.message_id || '');\nconst staticExisting = state.sessions[phone] || {};\nconst orderStorePath = String($env.ORDER_STORE_PATH || '/home/node/.n8n/whatsapp-orders.json');\nlet durableStore = { conversations: {}, active_orders_by_customer: {}, orders: {} };\ntry {\n  if (fs.existsSync(orderStorePath)) durableStore = JSON.parse(fs.readFileSync(orderStorePath, 'utf8'));\n} catch (_) {\n  durableStore = { conversations: {}, active_orders_by_customer: {}, orders: {} };\n}\nconst durableExisting = durableStore.conversations?.[phone] || {};\nconst existing = { ...durableExisting, ...staticExisting };\nconst durableActiveOrderId = durableStore.active_orders_by_customer?.[phone] || durableExisting.active_order_id || staticExisting.active_order_id || null;\nconst durableActiveOrder = durableActiveOrderId ? durableStore.orders?.[durableActiveOrderId] || null : null;\nconst handoffUntilMs = Date.parse(existing.handoff_until || '');\nconst handoffExpired = existing.handoff_status === 'active'\n  && Number.isFinite(handoffUntilMs)\n  && now >= handoffUntilMs;\nif (handoffExpired) {\n  existing.handoff_status = 'none';\n  existing.human_handoff = false;\n  existing.automation_enabled = true;\n  existing.handoff_until = null;\n}\nconst lastProductAt = Date.parse(existing.last_product_at || '');\nconst activeLastProductId = existing.last_product_id\n  && Number.isFinite(lastProductAt)\n  && now - lastProductAt <= productContextTtlMs\n    ? String(existing.last_product_id)\n    : null;\nconst contextFresh = Boolean(activeLastProductId);\nconst draftStatuses = ['COLLECTING', 'AWAITING_CONFIRMATION', 'HANDOFF'];\nconst orderUpdatedMs = Date.parse(durableActiveOrder?.updated_at || durableActiveOrder?.created_at || '');\nconst orderAgeMinutes = Number.isFinite(orderUpdatedMs) ? Math.max(0, (now - orderUpdatedMs) / 60000) : null;\nconst orderIsStale = Boolean(durableActiveOrder && draftStatuses.includes(durableActiveOrder.status)\n  && (!Number.isFinite(orderUpdatedMs) || now - orderUpdatedMs > draftTtlMs));\nconst activeOrderId = durableActiveOrder && draftStatuses.includes(durableActiveOrder.status) && !orderIsStale\n  ? durableActiveOrder.order_id\n  : null;\nconst activeOrderStatus = activeOrderId ? durableActiveOrder.status : 'NONE';\nconst activeOrderProductId = activeOrderId ? (durableActiveOrder?.product_id || null) : null;\nconst preserveOrderPending = Boolean(activeOrderId && existing.pending_order_id === activeOrderId);\n\nlet skipReason = null;\nif (!phone || !messageId) skipReason = 'missing_message_identity';\nelse if (state.processed_message_ids[messageId]) skipReason = 'duplicate_message_id';\nelse if (existing.human_handoff || existing.handoff_status === 'active') skipReason = 'human_handoff_active';\n\nif (messageId && !state.processed_message_ids[messageId]) {\n  state.processed_message_ids[messageId] = {\n    received_at: now,\n    phone_number: phone,\n    status: skipReason === 'human_handoff_active' ? 'routed_to_human' : 'processing',\n  };\n}\nif (skipReason === 'human_handoff_active') {\n  existing.last_activity_at = new Date(now).toISOString();\n  existing.last_seen = new Date(now).toISOString();\n  state.sessions[phone] = existing;\n}\n\nreturn [{\n  json: {\n    ...$json,\n    should_process: !skipReason,\n    skip_reason: skipReason,\n    session: {\n      preferred_language: existing.preferred_language || existing.language || 'unknown',\n      language: existing.preferred_language || existing.language || 'unknown',\n      last_intent: existing.last_intent || null,\n      last_product_id: activeLastProductId,\n      last_product_at: activeLastProductId ? existing.last_product_at : null,\n      last_requested_color: activeLastProductId ? (existing.last_requested_color || null) : null,\n      conversation_mode: activeOrderId ? 'ORDER' : (existing.conversation_mode || 'FAQ'),\n      pending_action: (contextFresh || preserveOrderPending) ? (existing.pending_action || null) : null,\n      pending_field: (contextFresh || preserveOrderPending) ? (existing.pending_field || null) : null,\n      pending_fields: (contextFresh || preserveOrderPending) && Array.isArray(existing.pending_fields) ? existing.pending_fields : [],\n      pending_product_id: (contextFresh || preserveOrderPending) ? (existing.pending_product_id || activeOrderProductId || null) : null,\n      pending_order_id: preserveOrderPending ? activeOrderId : null,\n      last_bot_action: (contextFresh || preserveOrderPending) ? (existing.last_bot_action || null) : null,\n      last_bot_question: (contextFresh || preserveOrderPending) ? (existing.last_bot_question || null) : null,\n      active_order_id: activeOrderId,\n      active_order_product_id: activeOrderProductId,\n      order_status: activeOrderStatus,\n      handoff_status: existing.handoff_status || (existing.human_handoff ? 'active' : 'none'),\n      handoff_until: existing.handoff_until || null,\n      automation_enabled: existing.automation_enabled !== false && !existing.human_handoff && existing.handoff_status !== 'active',\n      human_handoff: Boolean(existing.human_handoff || existing.handoff_status === 'active'),\n      last_activity_at: existing.last_activity_at || existing.last_seen || null,\n      updated_at: existing.updated_at || existing.last_activity_at || existing.last_seen || null,\n      context_ttl_minutes: contextMinutes,\n      order_draft_ttl_minutes: draftTtlMinutes,\n    },\n    loaded_last_product_id: activeLastProductId,\n    loaded_active_order_id: activeOrderId,\n    loaded_order_status: activeOrderStatus,\n    loaded_pending_field: (contextFresh || preserveOrderPending) ? (existing.pending_field || null) : null,\n    active_order_status: durableActiveOrder?.status || 'NONE',\n    order_age: orderAgeMinutes,\n    order_is_stale: orderIsStale,\n    state_event_at: stateEventAt,\n  },\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -298,7 +518,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const fs = require('fs');\n\nfunction readStoreFile(baseName, expectedType) {\n  for (const path of ['/store-data/' + baseName + '.json', '/store-data/' + baseName + '.example.json']) {\n    if (!fs.existsSync(path)) continue;\n    const value = JSON.parse(fs.readFileSync(path, 'utf8'));\n    const validType = expectedType === 'array'\n      ? Array.isArray(value)\n      : value && typeof value === 'object' && !Array.isArray(value);\n    if (!validType) throw new Error(baseName + ' has the wrong JSON type');\n    return { value, path };\n  }\n  throw new Error('Missing ' + baseName + '.json or ' + baseName + '.example.json');\n}\n\nconst productsFile = readStoreFile('products', 'array');\nconst faqFile = readStoreFile('faq', 'array');\nconst configFile = readStoreFile('store-config', 'object');\nconst config = configFile.value;\nconst products = productsFile.value\n  .filter((product) => product && product.id && product.name)\n  .slice(0, 100)\n  .map((product) => ({\n    id: String(product.id).slice(0, 120),\n    name: String(product.name).slice(0, 240),\n    category: String(product.category || '').slice(0, 120),\n    price: Number(product.price),\n    currency: String(product.currency || config.currency || 'MAD').slice(0, 12),\n    catalogued: product.catalogued !== false,\n    stock_status: ['in_stock', 'out_of_stock', 'unknown'].includes(product.stock_status)\n      ? product.stock_status\n      : (Number.isFinite(Number(product.stock)) ? (Number(product.stock) > 0 ? 'in_stock' : 'out_of_stock') : 'unknown'),\n    stock: product.stock === null || product.stock === undefined ? null : Number(product.stock),\n    sizes: Array.isArray(product.sizes) ? product.sizes.map(String).slice(0, 20) : [],\n    colors: Array.isArray(product.colors) ? product.colors.map(String).slice(0, 20) : [],\n    material: product.material === null || product.material === undefined\n      ? null\n      : String(product.material).slice(0, 160),\n    features: Array.isArray(product.features || product.characteristics)\n      ? (product.features || product.characteristics).map((value) => String(value).slice(0, 240)).slice(0, 20)\n      : [],\n    delivery: product.delivery && typeof product.delivery === 'object'\n      ? {\n          free: product.delivery.free === true,\n          description: String(product.delivery.description || '').slice(0, 300),\n        }\n      : null,\n    payment: product.payment && typeof product.payment === 'object'\n      ? {\n          inspect_before_payment: product.payment.inspect_before_payment === true,\n          description: String(product.payment.description || '').slice(0, 300),\n        }\n      : null,\n    aliases: Array.isArray(product.aliases) ? product.aliases.map(String).slice(0, 50) : [],\n  }))\n  .filter((product) => Number.isFinite(product.price)\n    && product.price >= 0\n    && product.aliases.length > 0\n    && (product.stock === null || (Number.isFinite(product.stock) && product.stock >= 0)));\n\nreturn [{\n  json: {\n    ...$json,\n    store_config: config,\n    products,\n    faq: faqFile.value.slice(0, 100),\n    store_data_sources: {\n      products: productsFile.path,\n      faq: faqFile.path,\n      config: configFile.path,\n    },\n  },\n}];"
+        "jsCode": "const fs = require('fs');\n\nfunction readStoreFile(baseName, expectedType) {\n  for (const path of ['/store-data/' + baseName + '.json', '/store-data/' + baseName + '.example.json']) {\n    if (!fs.existsSync(path)) continue;\n    const value = JSON.parse(fs.readFileSync(path, 'utf8'));\n    const validType = expectedType === 'array'\n      ? Array.isArray(value)\n      : value && typeof value === 'object' && !Array.isArray(value);\n    if (!validType) throw new Error(baseName + ' has the wrong JSON type');\n    return { value, path };\n  }\n  throw new Error('Missing ' + baseName + '.json or ' + baseName + '.example.json');\n}\n\nconst productsFile = readStoreFile('products', 'array');\nconst faqFile = readStoreFile('faq', 'array');\nconst configFile = readStoreFile('store-config', 'object');\nconst config = configFile.value;\nconst products = productsFile.value\n  .filter((product) => product && product.id && product.name)\n  .slice(0, 100)\n  .map((product) => ({\n    id: String(product.id).slice(0, 120),\n    name: String(product.name).slice(0, 240),\n    category: String(product.category || '').slice(0, 120),\n    price: Number(product.price),\n    currency: String(product.currency || config.currency || 'MAD').slice(0, 12),\n    catalogued: product.catalogued !== false,\n    stock_status: ['in_stock', 'out_of_stock', 'unknown'].includes(product.stock_status)\n      ? product.stock_status\n      : (Number.isFinite(Number(product.stock)) ? (Number(product.stock) > 0 ? 'in_stock' : 'out_of_stock') : 'unknown'),\n    stock: product.stock === null || product.stock === undefined ? null : Number(product.stock),\n    sizes: Array.isArray(product.sizes) ? product.sizes.map(String).slice(0, 20) : [],\n    colors: Array.isArray(product.colors) ? product.colors.map(String).slice(0, 20) : [],\n    material: product.material === null || product.material === undefined\n      ? null\n      : String(product.material).slice(0, 160),\n    features: Array.isArray(product.features || product.characteristics)\n      ? (product.features || product.characteristics).map((value) => String(value).slice(0, 240)).slice(0, 20)\n      : [],\n    delivery: product.delivery && typeof product.delivery === 'object'\n      ? {\n          free: product.delivery.free === true,\n          description: String(product.delivery.description || '').slice(0, 300),\n        }\n      : null,\n    payment: product.payment && typeof product.payment === 'object'\n      ? {\n          inspect_before_payment: product.payment.inspect_before_payment === true,\n          description: String(product.payment.description || '').slice(0, 300),\n        }\n      : null,\n    media: product.media && typeof product.media === 'object'\n      ? {\n          images: Array.isArray(product.media.images)\n            ? product.media.images\n                .filter((value) => typeof value === 'string' && /^https:\\/\\//i.test(value))\n                .map((value) => value.slice(0, 1000))\n                .slice(0, 10)\n            : [],\n        }\n      : { images: [] },\n    aliases: Array.isArray(product.aliases) ? product.aliases.map(String).slice(0, 50) : [],\n  }))\n  .filter((product) => Number.isFinite(product.price)\n    && product.price >= 0\n    && product.aliases.length > 0\n    && (product.stock === null || (Number.isFinite(product.stock) && product.stock >= 0)));\n\nreturn [{\n  json: {\n    ...$json,\n    store_config: config,\n    products,\n    faq: faqFile.value.slice(0, 100),\n    store_data_sources: {\n      products: productsFile.path,\n      faq: faqFile.path,\n      config: configFile.path,\n    },\n  },\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -311,13 +531,60 @@
     },
     {
       "parameters": {
-        "jsCode": "function normalize(value) {\n  return String(value || '')\n    .normalize('NFD')\n    .replace(/[\\u0300-\\u036f]/g, '')\n    .toLowerCase()\n    .replace(/[’']/g, ' ')\n    .replace(/[^a-z0-9\\u0600-\\u06ff]+/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nfunction containsPhrase(text, phrase) {\n  const normalizedPhrase = normalize(phrase);\n  return Boolean(normalizedPhrase) && (' ' + text + ' ').includes(' ' + normalizedPhrase + ' ');\n}\n\nfunction detectLanguage(raw, storedLanguage, defaultLanguage) {\n  const text = normalize(raw);\n  const stored = ['darija', 'arabic', 'french', 'english'].includes(storedLanguage) ? storedLanguage : null;\n  if (/^(hi|hello|hey)( there)?$/.test(text)) return 'english';\n  if (/^(bonjour|bonsoir|salut)$/.test(text)) return 'french';\n  if (/^(salam|salam alaykom|salam alikom)$/.test(text)) return 'darija';\n  if (/^(السلام عليكم|سلام)$/.test(text)) return 'darija';\n  if (/\\b(salam|wach|bghit|bnisba|chno|chnu|taman|ch7al|chhal|twsil|tawssil|fabor|3ndkom|kayn|kayna|mzyan|nkhtar|nkhless|nchri|nakhod|lbyed|k7el|ke7el)\\b/.test(text)) return 'darija';\n  if (/واش|بغيت|شنو|شحال|كاين|كاينة|مزيان|نختار|نكحل|بالنسبة/.test(text)) return 'darija';\n  if (/\\b(quel|quelle|quels|quelles|combien|avez|vous|est ce|je voudrais|pouvez|pourquoi|comment)\\b/.test(text)) return 'french';\n  if (/\\b(what|which|who|how much|do you|can you|i want|please|available|create|write|read|show|ignore|script)\\b/.test(text)) return 'english';\n  if (/[\\u0600-\\u06ff]/.test(raw)) return 'arabic';\n  if (stored) return stored;\n  return ['darija', 'arabic', 'french', 'english'].includes(defaultLanguage) ? defaultLanguage : 'darija';\n}\n\nfunction pickLanguageMap(map, language, fallback) {\n  return String(map?.[language] || map?.darija || map?.english || fallback || '');\n}\n\nfunction productForAi(product) {\n  if (!product) return null;\n  return {\n    id: product.id,\n    name: product.name,\n    category: product.category,\n    catalogued: product.catalogued,\n    price: product.price,\n    currency: product.currency,\n    sizes: product.sizes,\n    colors: product.colors,\n    material: product.material,\n    features: product.features,\n    delivery: product.delivery,\n    payment: product.payment,\n    stock_status: product.stock_status,\n  };\n}\n\nfunction featureText(product, language) {\n  const values = Array.isArray(product?.features) ? product.features : [];\n  const result = [];\n  for (const value of values) {\n    const feature = normalize(value);\n    if (feature.includes('double face') || feature.includes('reversible')) {\n      result.push({ darija: 'double face وكتلبس على جوج وجوه', arabic: 'قابلة للارتداء على الوجهين', french: 'réversible / double face', english: 'reversible / double face' }[language]);\n    } else if (feature === 'cotton') {\n      result.push({ darija: 'بالقطن', arabic: 'من القطن', french: 'en coton', english: 'cotton' }[language]);\n    } else if (feature.includes('good quality')) {\n      result.push({ darija: 'بجودة مزيانة', arabic: 'بجودة جيدة', french: 'de bonne qualité', english: 'good quality' }[language]);\n    } else if (feature.includes('pilling') || feature.includes('مكيحببش')) {\n      result.push({ darija: 'مسوّق على أنه مكيحببش', arabic: 'مسوّق على أنه مقاوم للتكوّر', french: 'présenté comme résistant au boulochage', english: 'marketed as resistant to pilling' }[language]);\n    }\n  }\n  return result.filter(Boolean);\n}\n\nfunction colorListText(colors, language) {\n  const labels = {\n    Black: { darija: 'الأسود 🖤', arabic: 'الأسود 🖤', french: 'noir 🖤', english: 'Black 🖤' },\n    White: { darija: 'الأبيض 🤍', arabic: 'الأبيض 🤍', french: 'blanc 🤍', english: 'White 🤍' },\n  };\n  const localized = (colors || []).map((color) => labels[color]?.[language] || String(color));\n  const connector = language === 'french' ? ' et ' : (language === 'english' ? ' and ' : ' و');\n  return localized.join(connector);\n}\n\nconst rawMessage = String($json.message_text || '');\nconst message = normalize(rawMessage);\nconst config = $json.store_config || {};\nconst products = Array.isArray($json.products) ? $json.products : [];\nconst faq = Array.isArray($json.faq) ? $json.faq : [];\nconst storedLanguage = $json.session?.preferred_language || $json.session?.language;\nconst language = detectLanguage(rawMessage, storedLanguage, config.default_language);\nconst productNames = products.map((item) => item.name);\nconst productNamesForLanguage = language === 'french'\n  ? productNames.join(' ou ')\n  : (language === 'english' ? productNames.join(' or ') : productNames.join(' ولا '));\nconst outOfScopeReply = pickLanguageMap(config.out_of_scope_messages, language,\n  'مرحبا 👋 نقدر نعاونك غير بمنتوجات وخدمات المتجر.');\nconst handoffReply = pickLanguageMap(config.handoff_messages, language,\n  'هاد المعلومة خاص المسؤول يأكدها ليك. نقدر نخلي ليه طلبك.');\n\nconst colorAliases = {\n  Black: ['black', 'noir', 'noire', 'k7el', 'ke7el', 'k7la', 'ke7la', 'كحل', 'كحلة', 'أسود', 'اسود'],\n  White: ['white', 'blanc', 'blanche', 'byed', 'beyd', 'byda', 'lbyed', 'lbeyd', 'بياض', 'بيض', 'بيضة', 'أبيض', 'ابيض'],\n};\nlet requestedColor = null;\nfor (const [canonical, aliases] of Object.entries(colorAliases)) {\n  if (aliases.some((alias) => containsPhrase(message, alias))) requestedColor = canonical;\n}\nconst unsupportedColorAliases = ['red', 'rouge', 'rouges', '7mer', 'hamra', 'حمر', 'حمرا', 'أحمر', 'احمر'];\nconst unsupportedColor = unsupportedColorAliases.find((alias) => containsPhrase(message, alias)) || null;\n\nconst matchEntries = [];\nfor (const product of products) {\n  let best = null;\n  for (const candidateRaw of [product.name, ...(product.aliases || [])]) {\n    const candidate = normalize(candidateRaw);\n    if (!candidate) continue;\n    const candidateTokens = candidate.split(' ');\n    const position = (' ' + message + ' ').indexOf(' ' + candidate + ' ');\n    const allTokensPresent = candidateTokens.every((token) => containsPhrase(message, token));\n    if (position < 0 && !allTokensPresent) continue;\n    const exact = message === candidate;\n    const score = exact ? 1000 : candidateTokens.length * 100;\n    const foundAt = position >= 0 ? position : 9999;\n    if (!best || score > best.score || (score === best.score && foundAt < best.position)) {\n      best = { product, score, position: foundAt };\n    }\n  }\n  if (best) matchEntries.push(best);\n}\nmatchEntries.sort((a, b) => b.score - a.score || a.position - b.position || a.product.id.localeCompare(b.product.id));\n\nconst comparisonConnector = /\\b(compare|comparison|difference|versus|vs|or|ou|wla|wala|a7san|better|best)\\b|ولا|مقارنة|الفرق|احسن|أحسن/i.test(rawMessage);\nconst explicitProductIds = [...new Set(matchEntries.map((entry) => entry.product.id))];\nlet ambiguousProduct = false;\nlet matchedProducts = [];\nif (explicitProductIds.length > 1 && comparisonConnector) {\n  matchedProducts = explicitProductIds.map((id) => products.find((item) => item.id === id)).filter(Boolean);\n} else if (explicitProductIds.length > 1) {\n  const leading = matchEntries[0];\n  const tied = matchEntries.filter((entry) => entry.score === leading.score && entry.position === leading.position);\n  if (tied.length > 1) {\n    ambiguousProduct = true;\n    matchedProducts = tied.map((entry) => entry.product);\n  } else {\n    matchedProducts = [leading.product];\n  }\n} else if (matchEntries[0]) {\n  matchedProducts = [matchEntries[0].product];\n}\n\nlet productFromContext = false;\nif (!matchedProducts.length && !ambiguousProduct && $json.session?.last_product_id) {\n  const previous = products.find((item) => item.id === $json.session.last_product_id);\n  if (previous) {\n    matchedProducts = [previous];\n    productFromContext = true;\n  }\n}\nconst product = matchedProducts.length === 1 ? matchedProducts[0] : null;\n\nconst securityPattern = /ignore (all |any )?(previous|prior)|system prompt|developer message|api[ -]?key|access token|app secret|secret key|environment variable|show .*env|read .*env|\\.env|execute (this|a|the) command|run (this|a|the) command|act as chatgpt|jailbreak|reveal .*prompt|show .*credential|كلمة السر|المفتاح السري/i;\nconst irrelevantPattern = /\\b(messi|ronaldo|python|javascript|homework|politic|politics|election|president|weather|malware|ransomware|virus|hack|recipe|movie|football score)\\b|اكتب.*كود|سياسة|الطقس|واجب مدرسي/i;\nconst greetingPattern = /^(salam|salam alaykom|salam alikom|hello|hi|hey|bonjour|bonsoir|salut|السلام عليكم|سلام|مرحبا)[!. ]*$/i;\nconst enquiryPattern = /^(bghit nswlk|wach momkin nswlk|momkin nswlk|je peux demander|i have a question|عندي سؤال|ممكن نسولك)[?.! ]*$/i;\nconst humanPattern = /\\b(human|agent|person|support|responsable|chi wahed|nhder m3a|reclamation|complaint|order issue|payment issue)\\b|مسؤول|انسان|إنسان|شكاية|مشكل فالطلب|مشكل في الطلب|مشكل في الدفع/i;\nconst returnSignal = /\\b(return|refund|exchange|retour|remboursement|echange|nrje3|nbdel)\\b|ترجيع|استرجاع|تبديل/i.test(message);\nconst priceSignal = /\\b(price|cost|prix|combien|ch7al|chhal|taman|tamane)\\b|بشحال|شحال|الثمن|ثمن|السعر/i.test(message);\nconst sizeWordSignal = /\\b(size|sizes|taille|tailles|9yas|9yassat)\\b|قياس|مقاس|المقاس|المقاسات/i.test(message);\nconst explicitSize = (rawMessage.match(/\\b(XXL|XL|XS|S|M|L)\\b/) || [])[1]\n  || (sizeWordSignal ? (message.match(/\\b(xxl|xl|xs|s|m|l)\\b/) || [])[1] : null)\n  || null;\nconst requestedSize = explicitSize ? explicitSize.toUpperCase() : null;\nconst sizingAdviceSignal = /\\b(what size|which size|recommend.*size|taille.*prendre|taille.*nakhod|chno taille|1[.,][0-9]{2}m?)\\b|شنو.*مقاس|طولي/i.test(message);\nconst colorWordSignal = /\\b(color|colors|colour|couleur|couleurs|lawn|lon|lwan)\\b|لون|اللون|الألوان|الوان/i.test(message);\nconst colorSignal = colorWordSignal || Boolean(requestedColor) || Boolean(unsupportedColor);\nconst deliverySignal = /\\b(delivery|shipping|livraison|livrez|tawsil|tawssil|twsil|twsel|fabor|gratuit|gratuite|free delivery)\\b|توصيل|التوصيل|الشحن|مجاني/i.test(message);\nconst paymentSignal = /\\b(payment|pay|cod|cash on delivery|paiement|payer|nkhless|khlass|before paying|inspect|check before)\\b|الدفع|نخلص|الاستلام|نشوفو|نفحص/i.test(message);\nconst availabilitySignal = /\\b(stock|available|availability|disponible|disponibilite|kayn|kayna|3ndkom|reste)\\b|متوفر|متوفرة|المخزون|كاين|كاينة/i.test(message);\nconst qualitySignal = /\\b(quality|qualite|kality|good|mzyan|pilling)\\b|الجودة|جودة|مزيان|كاليتي|مكيحببش|يحبب/i.test(message);\nconst materialSignal = /\\b(matiere|material|cotton|coton|fabric|tissu|100)\\b|قطن|ثوب|مادة|الخامة/i.test(message);\nconst orderSignal = /\\b(order|buy|purchase|commander|acheter|commande|ncommandi|nchri|bghit nakhod|bghit nchri)\\b|بغيت نشري|بغيت ناخد|نطلب|نشري|طلب/i.test(message);\nconst comparisonSignal = comparisonConnector && matchedProducts.length > 1;\n\nlet faqMatch = null;\nlet faqScore = 0;\nfor (const entry of faq) {\n  let score = 0;\n  for (const keyword of entry.keywords || []) {\n    const normalizedKeyword = normalize(keyword);\n    if (normalizedKeyword && containsPhrase(message, normalizedKeyword)) score += normalizedKeyword.split(' ').length;\n  }\n  if (score > faqScore) {\n    faqMatch = entry;\n    faqScore = score;\n  }\n}\n\nlet intent = 'UNKNOWN_STORE_QUERY';\nif ($json.message_type === 'image') intent = 'PRODUCT_INFO';\nelse if (securityPattern.test(rawMessage) || irrelevantPattern.test(rawMessage)) intent = 'OUT_OF_SCOPE';\nelse if (humanPattern.test(rawMessage) || returnSignal) intent = 'HUMAN_HANDOFF';\nelse if (greetingPattern.test(rawMessage) || enquiryPattern.test(rawMessage)) intent = 'GREETING';\nelse if (comparisonSignal) intent = 'PRODUCT_COMPARISON';\nelse if (sizingAdviceSignal || sizeWordSignal || requestedSize) intent = 'SIZE';\nelse if (priceSignal) intent = 'PRICE';\nelse if (colorSignal) intent = 'COLOR';\nelse if (deliverySignal) intent = 'DELIVERY';\nelse if (paymentSignal) intent = 'PAYMENT';\nelse if (availabilitySignal) intent = 'AVAILABILITY';\nelse if (qualitySignal) intent = 'QUALITY';\nelse if (materialSignal) intent = 'MATERIAL';\nelse if (orderSignal) intent = 'ORDER';\nelse if (product) intent = 'PRODUCT_INFO';\n\nconst shoppingSignal = /\\b(product|produit|article|store|shop|magasin|boutique|model|modele|bghit|nkhtar|bard|price|prix|taille|livraison|commande|quality|qualite)\\b|منتوج|منتج|متجر|موديل|بغيت|نختار|ثمن|مقاس|توصيل|طلب|جودة/i.test(message);\nconst storeSignal = Boolean(product)\n  || matchedProducts.length > 1\n  || productFromContext\n  || faqScore > 0\n  || shoppingSignal\n  || priceSignal || sizeWordSignal || colorSignal || deliverySignal || paymentSignal\n  || availabilitySignal || qualitySignal || materialSignal || orderSignal;\nif (intent === 'UNKNOWN_STORE_QUERY' && !storeSignal) intent = 'OUT_OF_SCOPE';\nconst relevant = intent !== 'OUT_OF_SCOPE';\n\nlet reply = '';\nlet shouldHandoff = false;\nlet aiNeeded = false;\nlet decisionReason = '';\nlet routingOutcome = relevant ? 'RELEVANT_UNCERTAIN' : 'OUT_OF_SCOPE';\n\nconst greetingReplies = {\n  darija: 'مرحبا 👋 شنو نقدر نعاونك فيه؟',\n  arabic: 'مرحبًا 👋 كيف يمكنني مساعدتك؟',\n  french: 'Bonjour 👋 Comment puis-je vous aider ?',\n  english: 'Hi 👋 How can I help?',\n};\nconst imageReplies = {\n  darija: 'توصلنا بالصورة 👍 ما كنحدّدوش المنتوج من الصورة. شنو كتقصد: ' + productNamesForLanguage + '؟',\n  arabic: 'وصلتنا الصورة 👍 لا نحدد المنتج من الصورة. أي منتج تقصد: ' + productNamesForLanguage + '؟',\n  french: 'Image reçue 👍 Nous n’identifions pas le produit depuis l’image. Lequel voulez-vous dire : ' + productNamesForLanguage + ' ?',\n  english: 'Image received 👍 We do not identify products from images. Which do you mean: ' + productNamesForLanguage + '?',\n};\nconst clarificationReplies = {\n  darija: 'أكيد 👌 شنو المنتوج اللي كتقصد: ' + productNamesForLanguage + '؟',\n  arabic: 'بالتأكيد 👌 أي منتج تقصد: ' + productNamesForLanguage + '؟',\n  french: 'Bien sûr 👌 Quel produit voulez-vous dire : ' + productNamesForLanguage + ' ?',\n  english: 'Sure 👌 Which product do you mean: ' + productNamesForLanguage + '?',\n};\n\nif (!relevant) {\n  reply = outOfScopeReply;\n  decisionReason = 'out_of_scope_or_security';\n} else if ($json.message_type === 'image') {\n  if (productFromContext && product) {\n    reply = pickLanguageMap({\n      darija: 'توصلنا بالصورة 👍 ما كنحدّدوش المنتوج منها. واش السؤال ديالك على ' + product.name + '؟',\n      arabic: 'وصلتنا الصورة 👍 لا نحدد المنتج منها. هل سؤالك عن ' + product.name + '؟',\n      french: 'Image reçue 👍 Nous ne l’utilisons pas pour identifier le produit. Votre question concerne ' + product.name + ' ?',\n      english: 'Image received 👍 We do not use it to identify the product. Is your question about ' + product.name + '?',\n    }, language);\n  } else {\n    reply = pickLanguageMap(imageReplies, language);\n  }\n  decisionReason = 'deterministic_image_clarification';\n} else if (intent === 'GREETING') {\n  reply = pickLanguageMap(greetingReplies, language);\n  decisionReason = 'deterministic_greeting';\n  routingOutcome = 'RELEVANT_UNDERSTOOD';\n} else if (intent === 'HUMAN_HANDOFF') {\n  reply = handoffReply;\n  shouldHandoff = true;\n  decisionReason = 'customer_or_issue_requires_human';\n  routingOutcome = 'RELEVANT_UNDERSTOOD';\n} else if (ambiguousProduct) {\n  reply = pickLanguageMap(clarificationReplies, language);\n  decisionReason = 'deterministic_product_clarification';\n} else if (['PRICE', 'SIZE', 'COLOR', 'PAYMENT', 'AVAILABILITY', 'QUALITY', 'MATERIAL', 'PRODUCT_INFO'].includes(intent) && !product) {\n  reply = pickLanguageMap(clarificationReplies, language);\n  decisionReason = 'deterministic_missing_product_clarification';\n} else if (intent === 'PRICE' && product) {\n  const sizes = product.sizes.length ? product.sizes.join(', ') : '';\n  const freeDelivery = product.delivery?.free === true;\n  reply = pickLanguageMap({\n    darija: product.name + ' بـ' + product.price + 'dh 🔥' + (freeDelivery ? ' والتوصيل فابور حتى لباب الدار 🚚' : '') + (sizes ? ' المقاسات ' + sizes + ' ✅' : ''),\n    arabic: 'سعر ' + product.name + ' هو ' + product.price + ' ' + product.currency + (freeDelivery ? '، والتوصيل مجاني حتى باب المنزل 🚚' : '') + (sizes ? ' المقاسات: ' + sizes + ' ✅' : ''),\n    french: product.name + ' coûte ' + product.price + ' ' + product.currency + (freeDelivery ? ', avec livraison gratuite jusqu’à votre porte 🚚' : '') + (sizes ? '. Tailles : ' + sizes + ' ✅' : ''),\n    english: product.name + ' costs ' + product.price + ' ' + product.currency + (freeDelivery ? ', with free delivery to your door 🚚' : '') + (sizes ? '. Sizes: ' + sizes + ' ✅' : ''),\n  }, language);\n  decisionReason = 'deterministic_product_price';\n  routingOutcome = 'RELEVANT_UNDERSTOOD';\n} else if (intent === 'SIZE' && product) {\n  const sizes = product.sizes.join(', ');\n  if (!sizes) {\n    reply = pickLanguageMap({\n      darija: 'المقاسات ديال ' + product.name + ' ما عنديش عليها معلومة مؤكدة دابا. نقدر نخلي المسؤول يأكدها ليك 👍',\n      arabic: 'لا تتوفر لدي معلومات مؤكدة عن مقاسات ' + product.name + '. يمكن لمسؤول المتجر تأكيدها.',\n      french: 'Je n’ai pas d’information confirmée sur les tailles de ' + product.name + '. L’équipe peut les confirmer.',\n      english: 'I do not have confirmed size information for ' + product.name + '. The store team can confirm it.',\n    }, language);\n    shouldHandoff = true;\n    decisionReason = 'deterministic_unknown_sizes';\n  } else if (sizingAdviceSignal) {\n    reply = pickLanguageMap({\n      darija: 'المقاسات المسجلة ديال ' + product.name + ' هي ' + sizes + '. ما عنديش جدول قياسات مؤكد باش نختار حسب الطول؛ نقدر نخلي المسؤول يعاونك 👍',\n      arabic: 'المقاسات المسجلة لـ ' + product.name + ' هي ' + sizes + '، ولا يتوفر جدول قياسات مؤكد للاختيار حسب الطول.',\n      french: 'Les tailles indiquées pour ' + product.name + ' sont ' + sizes + '. Je n’ai pas de guide confirmé pour choisir selon la taille.',\n      english: 'The listed sizes for ' + product.name + ' are ' + sizes + '. I do not have a confirmed chart for height-based advice.',\n    }, language);\n    shouldHandoff = true;\n    decisionReason = 'deterministic_no_sizing_chart';\n  } else {\n    reply = pickLanguageMap({\n      darija: 'المقاسات ديال ' + product.name + ': ' + sizes + ' ✅',\n      arabic: 'مقاسات ' + product.name + ': ' + sizes + ' ✅',\n      french: 'Tailles de ' + product.name + ' : ' + sizes + ' ✅',\n      english: product.name + ' sizes: ' + sizes + ' ✅',\n    }, language);\n    decisionReason = 'deterministic_sizes';\n    routingOutcome = 'RELEVANT_UNDERSTOOD';\n  }\n} else if (intent === 'COLOR' && product) {\n  const listed = product.colors || [];\n  const listedText = colorListText(listed, language);\n  const requestedIsListed = requestedColor && listed.includes(requestedColor);\n  const stockUnknown = product.stock_status === 'unknown';\n  if (!listed.length) {\n    reply = pickLanguageMap({\n      darija: 'الألوان ديال ' + product.name + ' ما عنديش عليها معلومة مؤكدة. نقدر نخلي المسؤول يأكدها ليك 👍',\n      arabic: 'لا تتوفر لدي معلومات مؤكدة عن ألوان ' + product.name + '. يمكن لمسؤول المتجر تأكيدها.',\n      french: 'Je n’ai pas d’information confirmée sur les couleurs de ' + product.name + '. L’équipe peut les confirmer.',\n      english: 'I do not have confirmed color information for ' + product.name + '. The store team can confirm it.',\n    }, language);\n    shouldHandoff = true;\n    decisionReason = 'deterministic_unknown_colors';\n  } else if (unsupportedColor || (requestedColor && !requestedIsListed)) {\n    reply = pickLanguageMap({\n      darija: product.name + ' كاينة غير بهاد الألوان: ' + listedText,\n      arabic: product.name + ' متوفرة بالألوان المسجلة فقط: ' + listedText,\n      french: product.name + ' est proposée uniquement dans ces couleurs : ' + listedText,\n      english: product.name + ' is listed only in these colors: ' + listedText,\n    }, language);\n    decisionReason = 'deterministic_unsupported_color';\n    routingOutcome = 'RELEVANT_UNDERSTOOD';\n  } else if (requestedIsListed) {\n    const colorText = requestedColor === 'Black'\n      ? { darija: 'بالأسود 🖤', arabic: 'بالأسود 🖤', french: 'en noir 🖤', english: 'in Black 🖤' }\n      : { darija: 'بالأبيض 🤍', arabic: 'بالأبيض 🤍', french: 'en blanc 🤍', english: 'in White 🤍' };\n    const stockText = stockUnknown\n      ? { darija: ' وبالنسبة للستوك الحالي نقدر نأكدها ليك مع المسؤول.', arabic: ' ويمكن لمسؤول المتجر تأكيد المخزون الحالي.', french: ' L’équipe peut confirmer le stock actuel.', english: ' The store team can confirm current stock.' }\n      : { darija: '', arabic: '', french: '', english: '' };\n    reply = product.name + ' ' + colorText[language] + stockText[language];\n    shouldHandoff = availabilitySignal && stockUnknown;\n    decisionReason = 'deterministic_requested_color';\n    routingOutcome = 'RELEVANT_UNDERSTOOD';\n  } else if (listed.length) {\n    reply = pickLanguageMap({\n      darija: 'الألوان ديال ' + product.name + ': ' + listedText,\n      arabic: 'ألوان ' + product.name + ': ' + listedText,\n      french: 'Couleurs de ' + product.name + ' : ' + listedText,\n      english: product.name + ' colors: ' + listedText,\n    }, language);\n    decisionReason = 'deterministic_colors';\n    routingOutcome = 'RELEVANT_UNDERSTOOD';\n  }\n} else if (intent === 'DELIVERY') {\n  const delivery = product?.delivery || config.delivery;\n  if (delivery?.free === true || Number(delivery?.price_mad) === 0) {\n    reply = pickLanguageMap({\n      darija: 'التوصيل فابور حتى لباب الدار 🚚',\n      arabic: 'التوصيل مجاني حتى باب المنزل 🚚',\n      french: 'La livraison est gratuite jusqu’à votre porte 🚚',\n      english: 'Delivery is free to your door 🚚',\n    }, language);\n    decisionReason = 'deterministic_delivery';\n    routingOutcome = 'RELEVANT_UNDERSTOOD';\n  }\n} else if (intent === 'PAYMENT' && product) {\n  if (product.payment?.inspect_before_payment === true) {\n    reply = pickLanguageMap({\n      darija: 'بالنسبة لـ ' + product.name + '، تقدر تشوف وتفحص المنتوج قبل ما تخلص 👍',\n      arabic: 'بالنسبة إلى ' + product.name + '، يمكنك فحص المنتج قبل الدفع 👍',\n      french: 'Pour ' + product.name + ', vous pouvez vérifier le produit avant de payer 👍',\n      english: 'For ' + product.name + ', you can inspect the product before paying 👍',\n    }, language);\n    decisionReason = 'deterministic_payment';\n    routingOutcome = 'RELEVANT_UNDERSTOOD';\n  } else {\n    reply = pickLanguageMap({\n      darija: 'شروط الأداء ديال ' + product.name + ' ما عنديش عليها معلومة مؤكدة. نقدر نخلي المسؤول يأكدها ليك 👍',\n      arabic: 'لا تتوفر لدي معلومات مؤكدة عن شروط الدفع لهذا المنتج. يمكن لمسؤول المتجر تأكيدها.',\n      french: 'Je n’ai pas d’information confirmée sur les conditions de paiement de ce produit. L’équipe peut les confirmer.',\n      english: 'I do not have confirmed payment terms for this product. The store team can confirm them.',\n    }, language);\n    shouldHandoff = true;\n    decisionReason = 'deterministic_unknown_payment_fact';\n  }\n} else if (intent === 'AVAILABILITY' && product) {\n  const sizes = product.sizes.length ? product.sizes.join(', ') : '';\n  if (product.stock_status === 'in_stock') {\n    reply = pickLanguageMap({ darija: product.name + ' متوفرة دابا ✅', arabic: product.name + ' متوفرة حاليًا ✅', french: product.name + ' est en stock ✅', english: product.name + ' is in stock ✅' }, language);\n    decisionReason = 'deterministic_in_stock';\n  } else if (product.stock_status === 'out_of_stock') {\n    reply = pickLanguageMap({ darija: product.name + ' ما متوفراش دابا.', arabic: product.name + ' غير متوفرة حاليًا.', french: product.name + ' est en rupture de stock.', english: product.name + ' is currently out of stock.' }, language);\n    decisionReason = 'deterministic_out_of_stock';\n  } else {\n    reply = pickLanguageMap({\n      darija: product.name + ' كاينة عندنا فالكاتالوغ 👍' + (sizes ? ' المقاسات المسجلة ' + sizes + '.' : '') + ' بالنسبة للستوك الحالي نقدر نأكدها ليك مع المسؤول.',\n      arabic: product.name + ' موجودة في الكتالوج 👍' + (sizes ? ' المقاسات المسجلة: ' + sizes + '.' : '') + ' يمكن لمسؤول المتجر تأكيد المخزون الحالي.',\n      french: product.name + ' figure dans notre catalogue 👍' + (sizes ? ' Tailles indiquées : ' + sizes + '.' : '') + ' L’équipe peut confirmer le stock actuel.',\n      english: product.name + ' is in our catalogue 👍' + (sizes ? ' Listed sizes: ' + sizes + '.' : '') + ' The store team can confirm current stock.',\n    }, language);\n    shouldHandoff = true;\n    decisionReason = 'catalogued_stock_unknown';\n  }\n  routingOutcome = 'RELEVANT_UNDERSTOOD';\n} else if (intent === 'MATERIAL' && product) {\n  if (product.material) {\n    reply = pickLanguageMap({ darija: product.name + ' بالـ' + product.material + ' ✅', arabic: 'خامة ' + product.name + ': ' + product.material + ' ✅', french: product.name + ' est en ' + product.material + ' ✅', english: product.name + ' material: ' + product.material + ' ✅' }, language);\n    decisionReason = 'deterministic_material';\n    routingOutcome = 'RELEVANT_UNDERSTOOD';\n  } else {\n    reply = pickLanguageMap({\n      darija: 'بالنسبة لـ ' + product.name + '، ماعنديش معلومة مؤكدة على الخامة ولا واش 100% coton. نقدر نخلي المسؤول يأكدها ليك 👍',\n      arabic: 'لا تتوفر لدي معلومة مؤكدة عن خامة ' + product.name + ' أو ما إذا كانت 100% قطن. يمكن لمسؤول المتجر تأكيدها.',\n      french: 'Je n’ai pas d’information confirmée sur la matière de ' + product.name + ' ni sur une composition 100% coton. L’équipe peut la confirmer.',\n      english: 'I do not have confirmed material information for ' + product.name + ' or confirmation that it is 100% cotton. The store team can confirm it.',\n    }, language);\n    shouldHandoff = true;\n    decisionReason = 'deterministic_unknown_material_fact';\n  }\n} else if (intent === 'QUALITY' && product) {\n  const features = featureText(product, language);\n  const qualityFacts = features.filter((value) => /جودة|مزيانة|boulochage|qualité|quality|pilling|التكوّر/.test(value));\n  if (qualityFacts.length) {\n    reply = product.name + ': ' + qualityFacts.join('، ') + ' ✅';\n    decisionReason = 'deterministic_quality';\n    routingOutcome = 'RELEVANT_UNDERSTOOD';\n  } else {\n    reply = pickLanguageMap({\n      darija: 'ماعنديش وصف مؤكد أكثر على جودة ' + product.name + '. نقدر نخلي المسؤول يوضحها ليك 👍',\n      arabic: 'لا يتوفر لدي وصف مؤكد إضافي عن جودة ' + product.name + '. يمكن لمسؤول المتجر توضيحها.',\n      french: 'Je n’ai pas de description confirmée supplémentaire sur la qualité de ' + product.name + '. L’équipe peut vous renseigner.',\n      english: 'I do not have an additional confirmed quality description for ' + product.name + '. The store team can help.',\n    }, language);\n    shouldHandoff = true;\n    decisionReason = 'deterministic_unknown_quality_fact';\n  }\n} else if (intent === 'PRODUCT_INFO' && product) {\n  const features = featureText(product, language);\n  const sizes = product.sizes.length ? product.sizes.join(', ') : '';\n  reply = pickLanguageMap({\n    darija: product.name + ' بـ' + product.price + 'dh' + (features.length ? '، ' + features.join('، ') : '') + (sizes ? '. المقاسات ' + sizes : '') + (product.delivery?.free ? ' والتوصيل فابور 🚚' : ''),\n    arabic: product.name + ' بسعر ' + product.price + ' ' + product.currency + (features.length ? '، ' + features.join('، ') : '') + (sizes ? '. المقاسات: ' + sizes : '') + (product.delivery?.free ? ' والتوصيل مجاني 🚚' : ''),\n    french: product.name + ' à ' + product.price + ' ' + product.currency + (features.length ? ', ' + features.join(', ') : '') + (sizes ? '. Tailles : ' + sizes : '') + (product.delivery?.free ? '. Livraison gratuite 🚚' : ''),\n    english: product.name + ' at ' + product.price + ' ' + product.currency + (features.length ? ', ' + features.join(', ') : '') + (sizes ? '. Sizes: ' + sizes : '') + (product.delivery?.free ? '. Free delivery 🚚' : ''),\n  }, language);\n  decisionReason = 'deterministic_product_information';\n  routingOutcome = 'RELEVANT_UNDERSTOOD';\n} else if (intent === 'ORDER') {\n  const orderFaq = faq.find((entry) => entry.intent === 'order');\n  reply = String(orderFaq?.answers?.[language] || orderFaq?.answers?.darija || '');\n  decisionReason = 'deterministic_order_instructions';\n  routingOutcome = 'RELEVANT_UNDERSTOOD';\n}\n\nif (!reply && relevant && (intent === 'PRODUCT_COMPARISON' || intent === 'UNKNOWN_STORE_QUERY' || storeSignal)) {\n  aiNeeded = true;\n  decisionReason = intent === 'PRODUCT_COMPARISON' ? 'comparison_requires_interpretation' : 'relevant_unresolved_question';\n  routingOutcome = 'RELEVANT_UNCERTAIN';\n}\nif (!reply && !aiNeeded) {\n  reply = outOfScopeReply;\n  decisionReason = 'deterministic_scope_prompt';\n  routingOutcome = 'OUT_OF_SCOPE';\n}\n\nlet relevantProductContext = matchedProducts.map(productForAi);\nif (aiNeeded && !relevantProductContext.length && intent === 'UNKNOWN_STORE_QUERY') {\n  relevantProductContext = products.map(productForAi);\n}\nconst aiStoreContext = {};\nif (deliverySignal) aiStoreContext.delivery = config.delivery || null;\nif (paymentSignal) aiStoreContext.cod_enabled = typeof config.cod_enabled === 'boolean' ? config.cod_enabled : null;\n\nreturn [{\n  json: {\n    ...$json,\n    normalized_message: message,\n    language,\n    preferred_language: language,\n    intent,\n    relevant,\n    routing_outcome: routingOutcome,\n    ai_needed: aiNeeded,\n    response_source: aiNeeded ? null : 'deterministic',\n    reply,\n    should_handoff: shouldHandoff,\n    decision_reason: decisionReason,\n    matched_product_ids: matchedProducts.map((item) => item.id),\n    primary_product_id: product?.id || null,\n    product_from_context: productFromContext,\n    requested_color: requestedColor,\n    ai_context: { products: relevantProductContext, store: aiStoreContext },\n  },\n}];"
+        "jsCode": "const fs = require('fs');\nconst crypto = require('crypto');\n\nfunction normalize(value) {\n  return String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase()\n    .replace(/[’']/g, ' ').replace(/[^a-z0-9+\\u0600-\\u06ff]+/g, ' ').replace(/\\s+/g, ' ').trim();\n}\nfunction phrase(text, value) {\n  const part = normalize(value);\n  return Boolean(part) && (' ' + text + ' ').includes(' ' + part + ' ');\n}\nfunction productMatch(text, products) {\n  const matches = [];\n  for (const product of products) {\n    let score = 0;\n    for (const raw of [product.name, ...(product.aliases || [])]) {\n      const alias = normalize(raw);\n      if (!alias || !phrase(text, alias)) continue;\n      score = Math.max(score, text === alias ? 1000 : alias.split(' ').length * 100);\n    }\n    if (score) matches.push({ product, score });\n  }\n  matches.sort((a, b) => b.score - a.score);\n  return matches[0]?.product || null;\n}\nfunction parseColor(text) {\n  const colors = {\n    Black: ['black', 'noir', 'noire', 'k7el', 'ke7el', 'k7l', 'k7la', 'ke7la', 'كحل', 'كحلة', 'أسود', 'اسود'],\n    White: ['white', 'blanc', 'blanche', 'byd', 'byed', 'beyd', 'byda', 'lbyed', 'lbeyd', 'بيض', 'بيضة', 'أبيض', 'ابيض'],\n  };\n  for (const [color, aliases] of Object.entries(colors)) {\n    if (aliases.some((alias) => phrase(text, alias))) return color;\n  }\n  return null;\n}\nfunction allColors(text) {\n  const tokens = text.split(' ');\n  const result = [];\n  for (const token of tokens) {\n    const color = parseColor(token);\n    if (color) result.push(color);\n  }\n  return result;\n}\nfunction allSizes(text) {\n  return text.split(' ').filter((token) => ['s', 'm', 'l', 'xl', 'xxl'].includes(token)).map((token) => token.toUpperCase());\n}\nfunction parseQuantity(text) {\n  const cleaned = text.replace(/\\bmachi\\s+(?:wa7da|wahda|w7da|joj|jouj|jooj|\\d+)\\b/g, ' ');\n  const unitCount = (cleaned.match(/\\b(?:wahda|wa7da|w7da)\\b|وحدة|واحدة/g) || []).length;\n  if (unitCount > 1) return Math.min(10, unitCount);\n  const numericUnits = (cleaned.match(/(?:^|\\s)1\\s+(?=(?:s|m|l|xl|xxl|black|white|noir|blanc|k7el|byed)\\b)/g) || []).length;\n  if (numericUnits > 1) return Math.min(10, numericUnits);\n  if (/\\b(joj|jouj|jooj)\\b|جوج|زوج/.test(cleaned)) return 2;\n  if (/\\b(tlata)\\b|ثلاثة/.test(cleaned)) return 3;\n  if (/\\b(wahda|wa7da|w7da)\\b|وحدة|واحدة/.test(cleaned)) return 1;\n  const numeric = cleaned.match(/(?:^|\\s)([1-9]|10)(?:\\s|$)/);\n  return numeric ? Number(numeric[1]) : null;\n}\nfunction parseItemSpecs(text, quantity) {\n  const marker = /(?:^|\\s)(?:wa7da|wahda|w7da|وحدة|واحدة)(?=\\s)/g;\n  const positions = [...text.matchAll(marker)];\n  const items = [];\n  if (positions.length) {\n    for (let index = 0; index < positions.length; index += 1) {\n      const start = positions[index].index + positions[index][0].length;\n      const end = positions[index + 1]?.index ?? text.length;\n      const segment = text.slice(start, end).trim();\n      items.push({ size: allSizes(segment)[0] || null, color: allColors(segment)[0] || null });\n    }\n  } else {\n    const sizes = allSizes(text);\n    const colors = allColors(text);\n    const count = Math.max(quantity || 0, sizes.length, colors.length);\n    for (let index = 0; index < count; index += 1) {\n      items.push({ size: sizes[index] || null, color: colors[index] || null });\n    }\n    if (quantity && sizes.length === 1 && quantity > 1) for (const item of items) item.size = sizes[0];\n    if (quantity && colors.length === 1 && quantity > 1) for (const item of items) item.color = colors[0];\n  }\n  return items;\n}\nfunction normalizePhone(raw) {\n  const original = String(raw || '').trim();\n  let digits = original.replace(/\\D/g, '');\n  if (/^0[67]\\d{8}$/.test(digits)) digits = '212' + digits.slice(1);\n  if (/^212[67]\\d{8}$/.test(digits)) return { normalized: '+' + digits, original };\n  return null;\n}\nfunction extractPhone(raw) {\n  const match = String(raw).match(/(?:\\+?212[\\s.-]?[67](?:[\\s.-]?\\d){8}|0[67](?:[\\s.-]?\\d){8})/);\n  if (!match) return null;\n  const parsed = normalizePhone(match[0]);\n  return parsed ? { ...parsed, matched: match[0], index: match.index } : null;\n}\nfunction extractCity(raw) {\n  const explicit = String(raw).match(/(?:mdina|ville|city|مدينة)\\s+([A-Za-z\\u0600-\\u06ff-]{2,40})/i);\n  if (explicit) return explicit[1].trim();\n  const known = ['chefchaouen', 'ben ahmed', 'imzouren', 'إمزورن', 'الحسيمة', 'casablanca', 'rabat', 'tanger', 'tetouan', 'marrakech', 'fes', 'agadir'];\n  const text = normalize(raw);\n  return known.find((city) => text.includes(normalize(city))) || null;\n}\nfunction looksLikeLocation(raw) {\n  return /\\b(mdina|ville|city|adresse|address|derb|7ay|hay|douar|blassa|quartier)\\b|إقليم|مدينة|حي|درب|دوار|العنوان/i.test(raw)\n    || Boolean(extractCity(raw));\n}\nfunction cleanName(value) {\n  const name = String(value || '').replace(/\\s+/g, ' ').trim();\n  if (!name || name.length < 3 || name.length > 100 || /\\d/.test(name)) return null;\n  const tokens = name.split(' ').filter(Boolean);\n  if (tokens.length < 2 || tokens.length > 5) return null;\n  if (/\\b(bghit|brite|b8it|baghi|wa7da|wahda|w7da|joj|taman|prix|price|ch7al|chhal|taille|size|color|couleur|nike|jaket|jacket|veste|survette|survet|montoni|twsil|tawssil|livraison|delivery|kayn|kayna|wach|adresse|address|mdina|ville|city|commande|order)\\b/i.test(name)) return null;\n  return name;\n}\nfunction pendingName(value) {\n  const full = cleanName(value);\n  if (full) return full;\n  const name = String(value || '').trim();\n  if (/^[A-Za-z\\u0600-\\u06ff-]{2,40}$/.test(name) && !/^(ok|safi|sf|noir|blanc|casablanca|taman|prix|price|nike|survette|taille|twsil|livraison)$/i.test(name)) return name;\n  return null;\n}\nfunction looksLikeAddressText(value) {\n  const raw = String(value || '').trim();\n  const text = normalize(raw);\n  if (/\\b(bghit|brite|b8it|baghi|bagha|w7da|wa7da|wahda|joj|n5do|nakhod|k7l|k7el|byd|byed)\\b/.test(text)) return false;\n  if (/^(?:\\+?212|0)[67]\\d{8}$/.test(raw.replace(/[\\s.-]/g, ''))) return false;\n  return /\\br\\s*\\d+\\b|\\b\\d{1,4}\\s+[A-Za-z\\u0600-\\u06ff]/i.test(raw)\n    || /\\b(rue|route|residence|résidence|apt|appartement|bloc|drissia|quartier|hay|7ay|derb|douar)\\b|حي|درب|دوار/i.test(raw);\n}\nfunction extractCustomerPatch(raw, pendingField) {\n  const source = String(raw || '').trim();\n  const lines = source.split(/\\r?\\n/).map((line) => line.trim()).filter(Boolean);\n  const patch = { customer_name: null, phone: null, phone_original: null, city: null, address: null, location_text: null };\n  const phone = extractPhone(source);\n  if (phone) {\n    patch.phone = phone.normalized; patch.phone_original = phone.original;\n    const beforePhone = source.slice(0, phone.index).trim();\n    const afterPhone = source.slice(phone.index + phone.matched.length).trim();\n    patch.customer_name = cleanName(beforePhone);\n    if (afterPhone) {\n      patch.city = extractCity(afterPhone);\n      patch.address = afterPhone;\n      patch.location_text = afterPhone;\n    }\n  }\n  const withoutPhone = phone ? (source.slice(0, phone.index) + '\\n' + source.slice(phone.index + phone.matched.length)).trim() : source;\n  const remainingLines = withoutPhone.split(/\\r?\\n/).map((line) => line.trim()).filter(Boolean);\n  const knownCityPattern = /\\b(chefchaouen|ben ahmed|imzouren|casablanca|rabat|tanger|tetouan|marrakech|fes|agadir)\\b|إمزورن|الحسيمة/i;\n  const cityLineIndex = remainingLines.findIndex((line) => knownCityPattern.test(line) || /\\b(mdina|ville|city)\\b|مدينة/i.test(line));\n  patch.city = extractCity(withoutPhone);\n  if (remainingLines.length > 1) {\n    const possibleName = cleanName(remainingLines[0]);\n    if (possibleName && cityLineIndex !== 0) patch.customer_name = possibleName;\n    const addressLines = remainingLines.filter((line, index) => index !== 0 || !patch.customer_name)\n      .filter((line, index) => !(index === cityLineIndex - (patch.customer_name ? 1 : 0) && normalize(line) === normalize(patch.city)));\n    const explicitAddress = addressLines.filter((line) => !patch.city || normalize(line) !== normalize(patch.city)).join(', ').trim();\n    if (explicitAddress) patch.address = explicitAddress;\n  } else if (remainingLines.length === 1) {\n    const line = remainingLines[0];\n    const cityMatch = line.match(knownCityPattern);\n    if (cityMatch) {\n      const before = line.slice(0, cityMatch.index).trim();\n      const after = line.slice(cityMatch.index + cityMatch[0].length).trim();\n      patch.customer_name = cleanName(before);\n      if (cityMatch.index === 0 && normalize(line) !== normalize(patch.city)) patch.address = line;\n      else if (after) patch.address = after;\n    } else if (pendingField === 'customer_name') patch.customer_name = pendingName(line);\n    else if (pendingField === 'address') patch.address = line;\n    else if (pendingField === 'city') patch.city = line.length <= 80 ? line : null;\n  }\n  if (!patch.customer_name && pendingField === 'customer_name') patch.customer_name = pendingName(withoutPhone);\n  if (!patch.address && looksLikeAddressText(withoutPhone)) patch.address = withoutPhone;\n  if (!patch.address && pendingField === 'address' && withoutPhone) patch.address = withoutPhone;\n  if (patch.city || patch.address) patch.location_text = source;\n  return patch;\n}\nfunction ensureItems(order) {\n  if (!Number.isInteger(Number(order.quantity)) || Number(order.quantity) < 1) {\n    order.items = Array.isArray(order.items) ? order.items : [];\n    return;\n  }\n  const quantity = Math.min(10, Number(order.quantity));\n  order.quantity = quantity;\n  order.items = Array.isArray(order.items) ? order.items.slice(0, quantity) : [];\n  while (order.items.length < quantity) order.items.push({ product_id: order.product_id || null, size: null, color: null });\n  for (const item of order.items) item.product_id = order.product_id || null;\n}\nconst LEGAL_TRANSITIONS = {\n  NONE: ['COLLECTING'],\n  COLLECTING: ['AWAITING_CONFIRMATION', 'CANCELLED', 'HANDOFF', 'ABANDONED'],\n  AWAITING_CONFIRMATION: ['COLLECTING', 'CONFIRMED', 'CANCELLED', 'HANDOFF', 'ABANDONED'],\n  CONFIRMED: ['OWNER_NOTIFIED'],\n  OWNER_NOTIFIED: [],\n  CANCELLED: [],\n  ABANDONED: [],\n  HANDOFF: ['COLLECTING', 'CANCELLED', 'ABANDONED'],\n};\nfunction transition(order, next) {\n  const current = order?.status || 'NONE';\n  if (current === next) return;\n  if (!(LEGAL_TRANSITIONS[current] || []).includes(next)) throw new Error('illegal_order_transition_' + current + '_to_' + next);\n  order.status = next;\n}\nfunction missingFields(order, product, config, waPhone) {\n  const defaults = ['product', 'quantity', 'sizes', 'colors', 'customer_name', 'phone', 'city', 'address'];\n  const configured = Array.isArray(config.orders?.required_fields)\n    ? config.orders.required_fields.filter((field) => defaults.includes(field))\n    : defaults;\n  const required = new Set(configured.length ? configured : defaults);\n  const missing = [];\n  if (required.has('product') && (!product || !order.product_id)) missing.push('product');\n  if (required.has('quantity') && (!Number.isInteger(order.quantity) || order.quantity < 1)) missing.push('quantity');\n  if (required.has('sizes') && product?.sizes?.length && order.items.some((item) => !product.sizes.includes(item.size))) missing.push('sizes');\n  if (required.has('colors') && product?.colors?.length && order.items.some((item) => !product.colors.includes(item.color))) missing.push('colors');\n  if (required.has('customer_name') && !order.customer_name) missing.push('customer_name');\n  const allowWa = config.orders?.allow_whatsapp_phone_fallback !== false;\n  if (required.has('phone') && !order.phone && !(allowWa && waPhone)) missing.push('phone');\n  if (required.has('city') && !order.city) missing.push('city');\n  if (required.has('address') && config.orders?.address_required !== false && !order.address) missing.push('address');\n  return [...new Set(missing)];\n}\nfunction pendingFieldFor(missing) {\n  const map = { product: 'product', quantity: 'quantity', sizes: 'size', colors: 'color', customer_name: 'customer_name', phone: 'phone', city: 'city', address: 'address' };\n  return map[missing[0]] || null;\n}\nfunction localizedColor(color, language) {\n  if (color === 'Black') return language === 'french' ? 'Noir' : (language === 'english' ? 'Black' : 'كحل');\n  if (color === 'White') return language === 'french' ? 'Blanc' : (language === 'english' ? 'White' : 'بيض');\n  return color || '-';\n}\nfunction summary(order, product, config, language) {\n  const lines = order.items.map((item) => '• 1 × ' + (item.size || '-') + ' - ' + localizedColor(item.color, language));\n  const free = product?.delivery?.free === true || config.delivery?.free === true;\n  if (language === 'french') return 'Voici votre commande à confirmer ✅\\n\\n' + product.name + '\\nQuantité : ' + order.quantity + '\\n' + lines.join('\\n') + '\\n\\nNom : ' + order.customer_name + '\\nTéléphone : ' + order.phone + '\\nVille : ' + order.city + '\\nAdresse : ' + order.address + (free ? '\\nLivraison : Gratuite 🚚' : '') + '\\n\\nLes informations sont correctes ? Confirmez la commande.';\n  if (language === 'english') return 'Please confirm your order ✅\\n\\n' + product.name + '\\nQuantity: ' + order.quantity + '\\n' + lines.join('\\n') + '\\n\\nName: ' + order.customer_name + '\\nPhone: ' + order.phone + '\\nCity: ' + order.city + '\\nAddress: ' + order.address + (free ? '\\nDelivery: Free 🚚' : '') + '\\n\\nAre these details correct? Confirm the order.';\n  return 'ها الطلب ديالك باش نأكدوه ✅\\n\\n' + product.name + '\\nالكمية: ' + order.quantity + '\\n' + lines.join('\\n') + '\\n\\nالاسم: ' + order.customer_name + '\\nالهاتف: ' + order.phone + '\\nالمدينة: ' + order.city + '\\nالعنوان: ' + order.address + (free ? '\\nالتوصيل: فابور 🚚' : '') + '\\n\\nواش المعلومات صحيحة ونأكد ليك الطلب؟';\n}\nfunction ownerOrderMessage(order, product, config) {\n  const lines = order.items.map((item) => '• 1 × ' + (item.size || '-') + ' - ' + (item.color || '-'));\n  const free = product?.delivery?.free === true || config.delivery?.free === true;\n  return '🛒 NOUVELLE COMMANDE\\n\\nCommande: #' + order.order_id + '\\nProduit: ' + product.name + '\\nQuantité: ' + order.quantity + '\\n\\nArticles:\\n' + lines.join('\\n') + '\\n\\nClient: ' + order.customer_name + '\\nTéléphone: ' + order.phone + '\\nVille: ' + order.city + '\\nAdresse: ' + order.address + (order.delivery_notes ? '\\nNotes: ' + order.delivery_notes : '') + (free ? '\\nLivraison: Gratuite' : '') + '\\nWhatsApp client: +' + String(order.customer_wa_id).replace(/^\\+/, '') + '\\nStatut: CONFIRMÉE ✅';\n}\nfunction promptFor(missing, order, product, language) {\n  const qty = order.quantity || 1;\n  if (missing.includes('product')) return language === 'french' ? 'Quel produit voulez-vous commander ?' : (language === 'english' ? 'Which product would you like to order?' : 'مرحبا أخويا 👍 ' + (qty === 2 ? 'جوج' : qty) + ' ديال شنو بغيتي؟');\n  if (missing.includes('quantity')) return language === 'french' ? 'Quelle quantité voulez-vous ?' : (language === 'english' ? 'How many would you like?' : 'شحال من وحدة بغيتي؟ وحدة ولا جوج؟');\n  if (missing.includes('sizes')) return language === 'french' ? 'Choisissez ' + qty + ' taille(s) parmi : ' + product.sizes.join(', ') : (language === 'english' ? 'Choose ' + qty + ' size(s) from: ' + product.sizes.join(', ') : 'اختار ليا ' + qty + ' ديال المقاسات من: ' + product.sizes.join(', ') + ' 👌');\n  if (missing.includes('colors')) return language === 'french' ? 'Choisissez ' + qty + ' couleur(s) parmi : ' + product.colors.join(', ') : (language === 'english' ? 'Choose ' + qty + ' color(s) from: ' + product.colors.join(', ') : 'اختار ليا اللون لكل وحدة: كحل ولا بيض 🖤🤍');\n  const personal = missing.filter((field) => ['customer_name', 'phone', 'city', 'address'].includes(field));\n  const labels = { customer_name: 'الاسم الكامل', phone: 'رقم الهاتف', city: 'المدينة', address: 'العنوان' };\n  if (language === 'french') return 'Il me manque seulement : ' + personal.join(', ') + '.';\n  if (language === 'english') return 'I only need: ' + personal.join(', ') + '.';\n  return 'صافي 👌 بقا ليا غير ' + personal.map((field) => labels[field]).join('، ') + ' باش نوجد ليك الطلب.';\n}\nfunction safeRead(path) {\n  if (!fs.existsSync(path)) return { version: 1, orders: {}, active_orders_by_customer: {}, processed_order_messages: {}, notifications: {}, conversations: {} };\n  const value = JSON.parse(fs.readFileSync(path, 'utf8'));\n  value.orders ||= {}; value.active_orders_by_customer ||= {}; value.processed_order_messages ||= {}; value.notifications ||= {}; value.conversations ||= {};\n  return value;\n}\nasync function withStore(path, callback) {\n  const separator = path.lastIndexOf('/');\n  const directory = separator > 0 ? path.slice(0, separator) : '.';\n  fs.mkdirSync(directory, { recursive: true });\n  const lockPath = path + '.lock';\n  let descriptor = null;\n  for (let attempt = 0; attempt < 80; attempt += 1) {\n    try { descriptor = fs.openSync(lockPath, 'wx', 0o600); break; }\n    catch (error) {\n      if (error.code !== 'EEXIST') throw error;\n      try { if (Date.now() - fs.statSync(lockPath).mtimeMs > 30000) fs.unlinkSync(lockPath); } catch (_) {}\n      await new Promise((resolve) => setTimeout(resolve, 25));\n    }\n  }\n  if (descriptor === null) throw new Error('order_store_lock_timeout');\n  try {\n    const store = safeRead(path);\n    const result = await callback(store);\n    const temporary = path + '.tmp-' + crypto.randomBytes(8).toString('hex');\n    fs.writeFileSync(temporary, JSON.stringify(store, null, 2) + '\\n', { encoding: 'utf8', mode: 0o600 });\n    fs.renameSync(temporary, path);\n    return result;\n  } finally {\n    try { fs.closeSync(descriptor); } catch (_) {}\n    try { fs.unlinkSync(lockPath); } catch (_) {}\n  }\n}\n\nconst raw = String($json.message_text || '');\nconst text = normalize(raw);\nconst products = Array.isArray($json.products) ? $json.products : [];\nconst config = $json.store_config || {};\nconst language = ['darija', 'arabic', 'french', 'english'].includes($json.session?.preferred_language) ? $json.session.preferred_language : (config.default_language || 'darija');\nconst phone = String($json.phone_number || '');\nconst messageId = String($json.message_id || '');\nconst storePath = String($env.ORDER_STORE_PATH || '/home/node/.n8n/whatsapp-orders.json');\nconst explicitProduct = productMatch(text, products);\nconst quantity = parseQuantity(text);\nconst explicitPriceSignal = /\\b(price|cost|prix|combien|ch7al|chhal|taman|tamane)\\b|بشحال|شحال|الثمن|ثمن|السعر/i.test(text);\nconst explicitSizeSignal = /\\b(size|sizes|taille|tailles|9yas|9yassat)\\b|قياس|مقاس|المقاس|المقاسات/i.test(text);\nconst explicitColorSignal = /\\b(color|colors|colour|couleur|couleurs|lawn|lon|lwan)\\b|لون|اللون|الألوان|الوان/i.test(text);\nconst explicitDeliverySignal = /\\b(delivery|shipping|livraison|tawsil|tawssil|twsil|twsel|fabor)\\b|توصيل|التوصيل|الشحن/i.test(text);\nconst explicitPaymentSignal = /\\b(payment|pay|paiement|payer|nkhless|khlass|cod)\\b|الدفع|نخلص|الاستلام/i.test(text);\nconst explicitAvailabilitySignal = /\\b(stock|available|availability|disponible|kayn|kayna|3ndkom)\\b|متوفر|متوفرة|المخزون|كاين|كاينة/i.test(text);\nconst explicitQualitySignal = /\\b(quality|qualite|kality|mzyan|pilling)\\b|الجودة|مزيان|كاليتي|مكيحببش/i.test(text);\nconst explicitMaterialSignal = /\\b(matiere|material|cotton|coton|fabric|tissu|100)\\b|قطن|ثوب|الخامة/i.test(text);\nconst strongPurchaseSignal = /\\b(nakhdo|n5do|nakhod|atchri|commander|commande|order|nchri|buy|purchase)\\b|بغيت نشري|بغيت ناخد|ناخدو|ناخد|نشري|نطلب/i.test(text);\nconst desireSignal = /\\b(bghit|brite|b8it|baghi|bagha)\\b|بغيت/i.test(text);\nconst purchaseSignal = strongPurchaseSignal || (desireSignal && quantity !== null && !explicitPriceSignal && !explicitSizeSignal && !explicitColorSignal && !explicitDeliverySignal);\nconst cancelSignal = /\\b(cancel|annuler|annule|ma b9itch|ma bghitch|khliha)\\b|خليها|بلا|الغاء|إلغاء|ما بغيتش/i.test(text);\nconst humanSignal = /\\b(human|humain|agent|support|responsable|mol lma7al|nhdr m3a)\\b|المسؤول|بغيت نهضر مع شي واحد/i.test(text);\nconst deliveryTimeSignal = /\\b(delivery time|combien.*jour|delai|délai|ch7al\\s+(?:fach|fash)\\s+(?:twslni|twselni)|(?:fach|fash)\\s+(?:twslni|twselni))\\b/i.test(raw) || /مدة|فاش غتوصلني|امتى.*توصيل/i.test(raw);\nconst photoSignal = /\\b(tsawr|photos|photo|pictures|picture|nxof tsawr)\\b|صور|تصاور|نشوف شي صور/i.test(text);\nconst negotiationSignal = /\\b(akhir taman|n9s lia|remise|discount|prix final|dernier prix)\\b|آخر ثمن|نقص ليا/i.test(text);\nconst orderStatusSignal = /\\b(order status|statut commande|fin commande|commande fin|status dyal commande)\\b|فين الطلب|حالة الطلب/i.test(text);\nconst confirmSignal = /^(oui|yes|ok|okay|confirm|confirmer|confirmed|ah|ahh|wakha|sf|safi|nadi|أكيد|نعم|اه|واخا|صافي|أكد|اكد)[!. ]*$/i.test(raw.trim());\nconst acknowledgementSignal = /^(ok|okay|sf|safi|nadi|wakha|ah|ahh|تمام|واخا|صافي|اه)[!. ]*$/i.test(raw.trim());\nconst changeSignal = /\\b(machi|bdel|bdelha|ghalat|change|changer|instead)\\b|بدل|غلط|ماشي/i.test(text);\nconst resumeSignal = /\\b(nkml commande|continue order|continue commande|nkml talab)\\b|نكمل الطلب/i.test(text);\nconst blockedSignal = /ignore (all |any )?(previous|prior)|system prompt|api[ -]?key|access token|app secret|\\.env|read .*env|confirm an order without|jailbreak|reveal .*prompt/i.test(raw)\n  || /\\b(python|javascript|homework|politic|malware|ransomware)\\b/i.test(text);\n\nconst result = await withStore(storePath, async (store) => {\n  const previous = store.processed_order_messages[messageId];\n  if (previous?.result) return { ...$json, ...previous.result, order_idempotent_replay: true };\n  const storedConversation = store.conversations[phone] || {};\n  const conversation = { ...$json.session, ...storedConversation };\n  const activeId = store.active_orders_by_customer[phone] || storedConversation.active_order_id || $json.session?.active_order_id || null;\n  let order = activeId ? store.orders[activeId] : null;\n  const draftStatuses = ['COLLECTING', 'AWAITING_CONFIRMATION', 'HANDOFF'];\n  const configuredDraftMinutes = Number($env.ORDER_DRAFT_TTL_MINUTES || 1440);\n  const draftTtlMinutes = Number.isFinite(configuredDraftMinutes) ? Math.min(43200, Math.max(5, Math.floor(configuredDraftMinutes))) : 1440;\n  const orderUpdatedMs = Date.parse(order?.updated_at || order?.created_at || '');\n  const orderAgeMinutes = order && Number.isFinite(orderUpdatedMs) ? Math.max(0, (Date.now() - orderUpdatedMs) / 60000) : null;\n  const orderIsStale = Boolean(order && draftStatuses.includes(order.status)\n    && (!Number.isFinite(orderUpdatedMs) || Date.now() - orderUpdatedMs > draftTtlMinutes * 60 * 1000));\n  let abandonedOrderId = null;\n  if (orderIsStale) {\n    transition(order, 'ABANDONED');\n    order.abandoned_at = new Date().toISOString();\n    order.abandonment_reason = 'draft_ttl_expired';\n    order.updated_at = order.abandoned_at;\n    abandonedOrderId = order.order_id;\n    delete store.active_orders_by_customer[phone];\n    conversation.active_order_id = null; conversation.order_status = 'ABANDONED'; conversation.conversation_mode = 'FAQ';\n    conversation.pending_action = null; conversation.pending_field = null; conversation.pending_fields = [];\n    conversation.pending_product_id = null; conversation.pending_order_id = null;\n    order = null;\n  } else if (order && !draftStatuses.includes(order.status)) {\n    delete store.active_orders_by_customer[phone];\n    conversation.active_order_id = null; conversation.conversation_mode = 'FAQ';\n    conversation.pending_action = null; conversation.pending_field = null; conversation.pending_fields = [];\n    conversation.pending_product_id = null; conversation.pending_order_id = null;\n    order = null;\n  } else if (!order && activeId) {\n    delete store.active_orders_by_customer[phone];\n    conversation.active_order_id = null; conversation.conversation_mode = 'FAQ';\n    conversation.pending_action = null; conversation.pending_field = null; conversation.pending_fields = [];\n    conversation.pending_product_id = null; conversation.pending_order_id = null;\n  }\n  if (order?.status === 'HANDOFF' && $json.session?.handoff_status !== 'active') transition(order, 'COLLECTING');\n  const configuredContextMinutes = Number($env.CONVERSATION_CONTEXT_TTL_MINUTES || 1440);\n  const contextMinutes = Number.isFinite(configuredContextMinutes) ? Math.min(10080, Math.max(5, Math.floor(configuredContextMinutes))) : 1440;\n  const conversationUpdatedAt = Date.parse(conversation.updated_at || conversation.last_activity_at || '');\n  const conversationFresh = Number.isFinite(conversationUpdatedAt) && Date.now() - conversationUpdatedAt <= contextMinutes * 60 * 1000;\n  const activeOrderProduct = order ? products.find((item) => item.id === order.product_id) || null : null;\n  const pendingProduct = products.find((item) => item.id === conversation.pending_product_id) || null;\n  const freshLastProductId = conversationFresh ? conversation.last_product_id : $json.session?.last_product_id;\n  const lastProduct = products.find((item) => item.id === freshLastProductId) || null;\n  const contextProduct = activeOrderProduct || pendingProduct || lastProduct;\n  const resolvedProduct = explicitProduct || contextProduct || null;\n  const resolutionSource = explicitProduct ? 'explicit_current_message' : (activeOrderProduct ? 'active_order' : (pendingProduct ? 'pending_product' : (lastProduct ? 'last_product' : 'none')));\n  let pendingField = conversation.pending_field || null;\n  let handled = false;\n  let intent = null;\n  let reply = '';\n  let shouldHandoff = false;\n  let routeReason = '';\n  let ownerNotificationRequired = false;\n  let ownerNotificationKind = null;\n  let ownerNotificationKey = null;\n  let ownerNotificationText = null;\n  let configuredProductMedia = [];\n  let extractedFields = {};\n\n  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;\n  for (const [processedId, record] of Object.entries(store.processed_order_messages)) {\n    if (Number(record?.processed_at || 0) < cutoff) delete store.processed_order_messages[processedId];\n  }\n\n  if (blockedSignal) {\n    handled = false;\n  } else if (humanSignal) {\n    handled = true; intent = 'HUMAN_REQUEST'; shouldHandoff = true; routeReason = 'explicit_human_request';\n    if (order) { transition(order, 'HANDOFF'); order.updated_at = new Date().toISOString(); }\n    reply = language === 'french' ? 'Bien sûr 👍 Je laisse un responsable continuer avec vous.' : (language === 'english' ? 'Of course 👍 I’ll let the store owner continue with you.' : 'أكيد 👍 غادي نخلي المسؤول يكمل معاك.');\n    ownerNotificationKey = 'HANDOFF-' + messageId;\n    ownerNotificationKind = 'handoff';\n    ownerNotificationText = '🙋 DEMANDE HUMAINE\\nClient WhatsApp: +' + phone.replace(/^\\+/, '') + (order ? '\\nCommande: #' + order.order_id : '') + '\\nLe client demande à parler avec un responsable.';\n    store.notifications[ownerNotificationKey] = { key: ownerNotificationKey, kind: 'handoff', status: 'PENDING', attempts: 0, created_at: new Date().toISOString(), customer_wa_id: phone };\n    ownerNotificationRequired = true;\n  } else if (!order && pendingField === 'color' && parseColor(text) && resolvedProduct) {\n    handled = true; intent = 'COLOR'; routeReason = 'resolved_pending_faq_color';\n    const selected = parseColor(text);\n    reply = selected === 'White'\n      ? resolvedProduct.name + ' كاينة بالأبيض 🤍'\n      : resolvedProduct.name + ' كاينة بالأسود 🖤';\n    conversation.pending_action = null; conversation.pending_field = null; conversation.pending_fields = [];\n    conversation.pending_product_id = null; conversation.last_requested_color = selected;\n  } else if (deliveryTimeSignal) {\n    handled = true; intent = 'DELIVERY_TIME'; routeReason = 'deterministic_delivery_eta';\n    const eta = config.delivery?.estimated_time || (config.delivery?.estimated_days ? String(config.delivery.estimated_days) + ' days' : null);\n    reply = eta\n      ? (language === 'french' ? 'Le délai de livraison indiqué est ' + eta + '.' : (language === 'english' ? 'The configured delivery time is ' + eta + '.' : 'مدة التوصيل المسجلة هي ' + eta + '.'))\n      : (language === 'french' ? 'Le délai exact doit être confirmé par le vendeur.' : (language === 'english' ? 'The exact delivery time needs confirmation from the seller.' : 'المدة بالضبط خاص المسؤول يأكدها ليك 👍'));\n  } else if (photoSignal) {\n    handled = true; intent = 'PRODUCT_PHOTOS'; routeReason = 'product_photos_request';\n    const product = explicitProduct || (order ? products.find((item) => item.id === order.product_id) : null) || contextProduct;\n    const images = product?.media?.images || [];\n    configuredProductMedia = images;\n    if (!product) reply = language === 'french' ? 'Pour quel produit voulez-vous les photos ?' : (language === 'english' ? 'Which product would you like photos of?' : 'ديال شنو المنتوج بغيتي الصور؟');\n    else if (images.length) {\n      reply = language === 'french' ? 'Voici les photos configurées pour ' + product.name + ' 👍' : (language === 'english' ? 'Here are the configured photos for ' + product.name + ' 👍' : 'هادو الصور المسجلين ديال ' + product.name + ' 👍');\n    } else {\n      reply = language === 'french' ? 'Les photos ne sont pas encore configurées ici. Je laisse le responsable vous les envoyer 👍' : (language === 'english' ? 'Photos are not configured here yet. The store team can send them to you 👍' : 'الصور مازال ما مكونفيگياش هنا. غادي نخلي المسؤول يصيفطهم ليك 👍');\n      shouldHandoff = true;\n    }\n  } else if (negotiationSignal) {\n    handled = true; intent = 'PRICE_NEGOTIATION'; routeReason = 'no_price_negotiation';\n    const product = explicitProduct || (order ? products.find((item) => item.id === order.product_id) : null) || contextProduct;\n    reply = product\n      ? (language === 'french' ? 'Le prix indiqué de ' + product.name + ' est ' + product.price + ' ' + product.currency + '. Je ne peux pas appliquer de remise.' : (language === 'english' ? 'The listed price for ' + product.name + ' is ' + product.price + ' ' + product.currency + '. I cannot apply discounts.' : 'الثمن المسجل ديال ' + product.name + ' هو ' + product.price + 'dh والتوصيل فابور 👍 ما نقدرش نبدل الثمن.'))\n      : (language === 'french' ? 'Dites-moi quel produit vous intéresse pour vous donner son prix enregistré.' : (language === 'english' ? 'Tell me which product you mean and I’ll give you its listed price.' : 'قول ليا شنو المنتوج باش نعطيك الثمن المسجل ديالو.'));\n  } else if (orderStatusSignal) {\n    handled = true; intent = 'ORDER_STATUS'; routeReason = 'customer_order_status';\n    const latest = Object.values(store.orders).filter((item) => item.customer_wa_id === phone)\n      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0] || null;\n    if (!latest) reply = language === 'french' ? 'Je ne trouve aucune commande liée à ce numéro WhatsApp.' : (language === 'english' ? 'I could not find an order linked to this WhatsApp number.' : 'ما لقيتش طلب مربوط بهاد رقم واتساب.');\n    else reply = language === 'french' ? 'Commande #' + latest.order_id + ' — statut: ' + latest.status + '.' : (language === 'english' ? 'Order #' + latest.order_id + ' — status: ' + latest.status + '.' : 'الطلب #' + latest.order_id + ' الحالة ديالو: ' + latest.status + '.');\n  } else if (resumeSignal) {\n    handled = true; intent = 'ORDER_RESUME'; routeReason = order ? 'explicit_valid_draft_resume' : 'no_resumable_draft';\n    if (!order) {\n      reply = language === 'french' ? 'Je ne trouve pas de commande en cours à reprendre.' : (language === 'english' ? 'I could not find an active draft order to resume.' : 'ما لقيتش طلب باقي مفتوح باش نكملوه.');\n    } else {\n      const product = products.find((item) => item.id === order.product_id) || null;\n      const waPhone = normalizePhone(phone)?.normalized || null;\n      const missing = missingFields(order, product, config, waPhone);\n      if (!missing.length) {\n        transition(order, 'AWAITING_CONFIRMATION'); order.awaiting_confirmation_prompted = true;\n        reply = summary(order, product, config, language);\n        conversation.pending_action = 'CONFIRM_ORDER'; conversation.pending_field = 'confirmation'; conversation.pending_fields = ['confirmation'];\n        conversation.pending_product_id = order.product_id; conversation.pending_order_id = order.order_id;\n        conversation.last_bot_action = 'REQUEST_FINAL_CONFIRMATION'; conversation.last_bot_question = reply;\n      } else {\n        if (order.status === 'AWAITING_CONFIRMATION') transition(order, 'COLLECTING');\n        order.awaiting_confirmation_prompted = false;\n        reply = promptFor(missing, order, product, language);\n        conversation.pending_action = 'COLLECT_ORDER_FIELD'; conversation.pending_field = pendingFieldFor(missing); conversation.pending_fields = missing.map((field) => ({ sizes: 'size', colors: 'color' }[field] || field));\n        conversation.pending_product_id = order.product_id; conversation.pending_order_id = order.order_id;\n        conversation.last_bot_action = 'REQUEST_ORDER_FIELDS'; conversation.last_bot_question = reply;\n      }\n    }\n  } else if (order && cancelSignal) {\n    handled = true; intent = 'ORDER_CANCEL'; routeReason = 'legal_cancel_transition';\n    transition(order, 'CANCELLED'); order.updated_at = new Date().toISOString();\n    delete store.active_orders_by_customer[phone];\n    conversation.pending_action = null; conversation.pending_field = null; conversation.pending_fields = [];\n    conversation.pending_product_id = null; conversation.pending_order_id = null;\n    conversation.last_bot_action = 'ORDER_CANCELLED'; conversation.last_bot_question = null;\n    reply = language === 'french' ? 'D’accord, la commande a été annulée.' : (language === 'english' ? 'Okay, the order has been cancelled.' : 'واخا، تلغى الطلب ديالك 👍');\n  } else if (order && order.status === 'AWAITING_CONFIRMATION' && confirmSignal\n    && order.awaiting_confirmation_prompted === true\n    && conversation.last_bot_action === 'REQUEST_FINAL_CONFIRMATION') {\n    handled = true; intent = 'ORDER_CONFIRM'; routeReason = 'legal_explicit_confirmation';\n    const product = products.find((item) => item.id === order.product_id);\n    const waPhone = normalizePhone(phone)?.normalized || null;\n    const missing = missingFields(order, product, config, waPhone);\n    if (missing.length) {\n      transition(order, 'COLLECTING'); order.awaiting_confirmation_prompted = false;\n      reply = promptFor(missing, order, product, language); routeReason = 'confirmation_rejected_incomplete_order';\n      conversation.pending_action = 'COLLECT_ORDER_FIELD'; conversation.pending_field = pendingFieldFor(missing); conversation.pending_fields = missing.map((field) => ({ sizes: 'size', colors: 'color' }[field] || field));\n      conversation.pending_product_id = order.product_id; conversation.pending_order_id = order.order_id;\n      conversation.last_bot_action = 'REQUEST_ORDER_FIELDS'; conversation.last_bot_question = reply;\n    } else {\n      transition(order, 'CONFIRMED'); order.confirmed_at = new Date().toISOString(); order.updated_at = order.confirmed_at;\n      order.notification_status = 'PENDING'; order.notification_attempts = Number(order.notification_attempts || 0);\n      delete store.active_orders_by_customer[phone];\n      conversation.pending_action = null; conversation.pending_field = null; conversation.pending_fields = [];\n      conversation.pending_product_id = null; conversation.pending_order_id = null;\n      conversation.last_bot_action = 'ORDER_CONFIRMED'; conversation.last_bot_question = null;\n      ownerNotificationRequired = true; ownerNotificationKind = 'order'; ownerNotificationKey = order.order_id;\n      ownerNotificationText = ownerOrderMessage(order, product, config);\n      order.owner_notification_text = ownerNotificationText;\n      reply = language === 'french' ? 'Commande confirmée ✅\\nNuméro: #' + order.order_id + '\\nLe responsable vous contactera si une précision est nécessaire. Merci 🙏' : (language === 'english' ? 'Your order is confirmed ✅\\nOrder number: #' + order.order_id + '\\nThe store team will contact you if anything else is needed. Thank you 🙏' : 'تم تأكيد الطلب ديالك ✅\\nرقم الطلب: #' + order.order_id + '\\nغادي يتواصل معاك المسؤول إلا كان خاص شي تأكيد إضافي. شكراً ليك 🙏');\n    }\n  } else if (order && acknowledgementSignal) {\n    handled = true; intent = 'ACKNOWLEDGEMENT'; routeReason = 'active_order_acknowledgement_no_state_change';\n    reply = language === 'french' ? 'D’accord 👍 Il me manque toujours les informations demandées.' : (language === 'english' ? 'Okay 👍 I still need the requested order information.' : 'واخا 👍 باقي خاصني المعلومات اللي طلبت منك باش نكمل الطلب.');\n  } else {\n    const activeExpected = Boolean(order && ['COLLECTING', 'AWAITING_CONFIRMATION'].includes(order.status));\n    const rawPhone = extractPhone(raw);\n    const possibleName = activeExpected ? (pendingField === 'customer_name' ? pendingName(raw) : cleanName(raw)) : null;\n    const explicitFaqSignal = !changeSignal && (explicitPriceSignal || explicitSizeSignal || explicitColorSignal\n      || deliveryTimeSignal || explicitDeliverySignal || explicitPaymentSignal || explicitAvailabilitySignal\n      || explicitQualitySignal || explicitMaterialSignal || photoSignal || negotiationSignal || orderStatusSignal);\n    const pendingResolvable = activeExpected && !explicitFaqSignal && !acknowledgementSignal && (\n      (pendingField === 'color' && Boolean(parseColor(text)))\n      || (pendingField === 'size' && allSizes(text).length > 0)\n      || (pendingField === 'quantity' && quantity !== null)\n      || (pendingField === 'phone' && Boolean(rawPhone))\n      || (pendingField === 'address' && Boolean(raw.trim()))\n      || (pendingField === 'city' && Boolean(extractCity(raw)))\n      || (pendingField === 'customer_name' && Boolean(pendingName(raw)))\n      || (pendingField === 'product' && Boolean(explicitProduct))\n    );\n    const shouldStart = purchaseSignal || pendingResolvable || (activeExpected && !explicitFaqSignal && (quantity || explicitProduct || allSizes(text).length || allColors(text).length || rawPhone || looksLikeLocation(raw) || looksLikeAddressText(raw) || changeSignal || possibleName));\n    if (shouldStart) {\n      handled = true;\n      const rawSizes = allSizes(text);\n      const rawColors = allColors(text);\n      if (!order) intent = 'PURCHASE_INTENT';\n      else if (changeSignal) intent = 'ORDER_CHANGE';\n      else if (rawPhone) intent = 'CUSTOMER_PHONE';\n      else if (looksLikeLocation(raw)) intent = extractCity(raw) ? 'CUSTOMER_CITY' : 'CUSTOMER_ADDRESS';\n      else if (rawSizes.length) intent = 'ORDER_SIZE';\n      else if (rawColors.length) intent = 'ORDER_COLOR';\n      else if (quantity) intent = purchaseSignal ? 'PURCHASE_INTENT' : 'QUANTITY';\n      else if (possibleName) intent = 'CUSTOMER_NAME';\n      else intent = 'PURCHASE_INTENT';\n      const now = new Date().toISOString();\n      if (!order) {\n        let orderId;\n        do { orderId = 'ORD-' + now.slice(0, 10).replace(/-/g, '') + '-' + crypto.randomBytes(6).toString('hex').toUpperCase(); } while (store.orders[orderId]);\n        order = {\n          order_id: orderId, customer_wa_id: phone, product_id: null, quantity: quantity || null, items: [],\n          customer_name: null, phone: null, phone_original: null, phone_source: null, city: null, address: null,\n          location_text: null, delivery_notes: null, status: 'COLLECTING', notification_status: 'NOT_READY',\n          notification_attempts: 0, created_at: now, updated_at: now, confirmed_at: null, owner_notified_at: null,\n          awaiting_confirmation_prompted: false,\n        };\n        store.orders[orderId] = order; store.active_orders_by_customer[phone] = orderId;\n      }\n      if (explicitProduct && explicitProduct.id !== order.product_id) {\n        order.product_id = explicitProduct.id;\n        for (const item of order.items || []) { item.product_id = explicitProduct.id; if (!explicitProduct.sizes.includes(item.size)) item.size = null; if (!explicitProduct.colors.includes(item.color)) item.color = null; }\n      } else if (!order.product_id && resolvedProduct) order.product_id = resolvedProduct.id;\n      if (quantity) order.quantity = quantity;\n      ensureItems(order);\n      const product = products.find((item) => item.id === order.product_id) || null;\n      const intendedSize = changeSignal ? (text.match(/(?:taille|size)\\s+(s|m|l|xl|xxl)\\s+(?:machi|ماشي)/)?.[1]?.toUpperCase() || null) : null;\n      const intendedColor = changeSignal ? parseColor(text) : null;\n      const specs = parseItemSpecs(text, order.quantity);\n      if (intendedSize) specs.splice(0, specs.length, { size: intendedSize, color: null });\n      if (intendedColor) specs.splice(0, specs.length, { size: null, color: intendedColor });\n      const mentionedSizes = allSizes(text);\n      const invalidSizes = product ? mentionedSizes.filter((size) => !product.sizes.includes(size)) : [];\n      if (invalidSizes.length) {\n        reply = 'هاد الموديل المقاسات ديالو هما ' + product.sizes.join(', ') + '. ' + invalidSizes.join(', ') + ' ما مسجلش عندنا.';\n        routeReason = 'invalid_order_size';\n      } else if (product) {\n        for (let index = 0; index < Math.min(order.items.length, specs.length); index += 1) {\n          if (specs[index].size && product.sizes.includes(specs[index].size)) order.items[index].size = specs[index].size;\n          if (specs[index].color && product.colors.includes(specs[index].color)) order.items[index].color = specs[index].color;\n        }\n      }\n      const customerPatch = extractCustomerPatch(raw, pendingField);\n      extractedFields = { ...customerPatch, quantity: quantity || null, sizes: allSizes(text), colors: allColors(text), product_id: explicitProduct?.id || null };\n      if (customerPatch.phone) {\n        order.phone = customerPatch.phone; order.phone_original = customerPatch.phone_original; order.phone_source = 'customer_provided';\n      }\n      if (customerPatch.customer_name) order.customer_name = customerPatch.customer_name;\n      if (customerPatch.city) order.city = customerPatch.city;\n      if (customerPatch.address) order.address = customerPatch.address;\n      if (customerPatch.location_text) order.location_text = customerPatch.location_text;\n      const waPhone = normalizePhone(phone)?.normalized || null;\n      if (!order.phone && String($env.ORDER_PHONE_SOURCE || config.orders?.phone_source || 'customer_provided_preferred') === 'customer_provided_preferred' && config.orders?.allow_whatsapp_phone_fallback !== false && waPhone) {\n        order.phone = waPhone; order.phone_original = phone; order.phone_source = 'whatsapp_sender_fallback';\n      }\n      order.updated_at = new Date().toISOString();\n      const missing = missingFields(order, product, config, waPhone);\n      if (!reply) {\n        if (!missing.length) {\n          transition(order, 'AWAITING_CONFIRMATION'); order.awaiting_confirmation_prompted = true;\n          reply = summary(order, product, config, language); routeReason = changeSignal ? 'updated_order_summary' : 'complete_order_summary';\n          conversation.pending_action = 'CONFIRM_ORDER'; conversation.pending_field = 'confirmation'; conversation.pending_fields = ['confirmation'];\n          conversation.pending_product_id = order.product_id; conversation.pending_order_id = order.order_id;\n          conversation.last_bot_action = 'REQUEST_FINAL_CONFIRMATION'; conversation.last_bot_question = reply;\n        } else {\n          transition(order, 'COLLECTING'); order.awaiting_confirmation_prompted = false;\n          reply = promptFor(missing, order, product, language); routeReason = 'collect_missing_order_fields';\n          conversation.pending_action = 'COLLECT_ORDER_FIELD'; conversation.pending_field = pendingFieldFor(missing); conversation.pending_fields = missing.map((field) => ({ sizes: 'size', colors: 'color' }[field] || field));\n          conversation.pending_product_id = order.product_id; conversation.pending_order_id = order.order_id;\n          conversation.last_bot_action = 'REQUEST_ORDER_FIELDS'; conversation.last_bot_question = reply;\n        }\n      }\n    }\n  }\n\n  const orderProduct = order ? products.find((item) => item.id === order.product_id) : null;\n  const orderMissing = order ? missingFields(order, orderProduct, config, normalizePhone(phone)?.normalized || null) : [];\n  if (order && order.status === 'COLLECTING' && orderMissing.length && (!conversation.pending_field || conversation.pending_order_id !== order.order_id)) {\n    conversation.pending_action = 'COLLECT_ORDER_FIELD'; conversation.pending_field = pendingFieldFor(orderMissing);\n    conversation.pending_fields = orderMissing.map((field) => ({ sizes: 'size', colors: 'color' }[field] || field));\n    conversation.pending_product_id = order.product_id; conversation.pending_order_id = order.order_id;\n  }\n  if (order && order.status === 'AWAITING_CONFIRMATION') {\n    conversation.pending_action = 'CONFIRM_ORDER'; conversation.pending_field = 'confirmation'; conversation.pending_fields = ['confirmation'];\n    conversation.pending_product_id = order.product_id; conversation.pending_order_id = order.order_id;\n  }\n  const nowIso = new Date().toISOString();\n  conversation.conversation_mode = order && ['COLLECTING', 'AWAITING_CONFIRMATION', 'HANDOFF'].includes(order.status) ? 'ORDER' : (conversation.conversation_mode || 'FAQ');\n  conversation.active_order_id = order && ['COLLECTING', 'AWAITING_CONFIRMATION', 'HANDOFF'].includes(order.status) ? order.order_id : null;\n  conversation.order_status = order?.status || conversation.order_status || 'NONE';\n  conversation.preferred_language = language;\n  if (explicitProduct) { conversation.last_product_id = explicitProduct.id; conversation.last_product_at = nowIso; }\n  else if (!conversation.last_product_id && order?.product_id) { conversation.last_product_id = order.product_id; conversation.last_product_at = nowIso; }\n  if (handled && intent) conversation.last_intent = intent;\n  conversation.last_activity_at = nowIso; conversation.updated_at = nowIso;\n  conversation.last_event_at = Math.max(Number(conversation.last_event_at || 0), Number($json.state_event_at || Date.now()));\n  store.conversations[phone] = conversation;\n  const output = {\n    order_handled: handled,\n    language,\n    preferred_language: language,\n    relevant: handled ? true : undefined,\n    routing_outcome: handled ? (shouldHandoff ? 'RELEVANT_UNCERTAIN' : 'RELEVANT_UNDERSTOOD') : undefined,\n    intent: handled ? intent : undefined,\n    reply: handled ? reply : undefined,\n    response_source: handled ? 'deterministic' : undefined,\n    ai_needed: handled ? false : undefined,\n    should_handoff: handled ? shouldHandoff : undefined,\n    route_reason: handled ? routeReason : undefined,\n    decision_reason: handled ? routeReason : undefined,\n    active_order_id: order && ['COLLECTING', 'AWAITING_CONFIRMATION', 'HANDOFF'].includes(order.status) ? order.order_id : null,\n    order_id: order?.order_id || null,\n    order_status: order?.status || 'NONE',\n    quantity: order?.quantity || null,\n    order_items: order?.items || [],\n    missing_order_fields: orderMissing,\n    primary_product_id: explicitProduct?.id || order?.product_id || conversation.pending_product_id || conversation.last_product_id || null,\n    matched_product_ids: explicitProduct ? [explicitProduct.id] : (order?.product_id ? [order.product_id] : []),\n    owner_notification_required: ownerNotificationRequired,\n    owner_notification_kind: ownerNotificationKind,\n    owner_notification_key: ownerNotificationKey,\n    owner_notification_text: ownerNotificationText,\n    owner_notification_status: order?.notification_status || (ownerNotificationRequired ? 'PENDING' : null),\n    configured_product_media: configuredProductMedia,\n    extracted_entities: handled ? {\n      product_id: order?.product_id || explicitProduct?.id || null,\n      quantity: order?.quantity || quantity || null,\n      items: order?.items || [],\n      customer_name: order?.customer_name || null,\n      phone: order?.phone || null,\n      city: order?.city || null,\n      location_text: order?.location_text || null,\n    } : null,\n    incoming_text: raw,\n    normalized_text: text,\n    loaded_last_product_id: $json.loaded_last_product_id || $json.session?.last_product_id || null,\n    loaded_active_order_id: activeId,\n    active_order_id_loaded: activeId,\n    loaded_order_status: $json.active_order_status || $json.session?.order_status || 'NONE',\n    active_order_status: order?.status || (abandonedOrderId ? 'ABANDONED' : 'NONE'),\n    order_age: orderAgeMinutes,\n    order_is_stale: orderIsStale,\n    loaded_pending_field: pendingField,\n    detected_intent: handled ? intent : null,\n    explicit_product_id: explicitProduct?.id || null,\n    resolved_product_id: resolvedProduct?.id || null,\n    resolution_source: resolutionSource,\n    active_order_product_id: order?.product_id || null,\n    extracted_fields: extractedFields,\n    merged_order: order ? JSON.parse(JSON.stringify(order)) : null,\n    missing_fields: orderMissing,\n    next_pending_field: conversation.pending_field || null,\n    pending_action: conversation.pending_action || null,\n    pending_field: conversation.pending_field || null,\n    pending_fields: conversation.pending_fields || [],\n    pending_product_id: conversation.pending_product_id || null,\n    pending_order_id: conversation.pending_order_id || null,\n    last_bot_action: conversation.last_bot_action || null,\n    last_bot_question: conversation.last_bot_question || null,\n    conversation_mode: conversation.conversation_mode,\n    wa_id: phone,\n    conversation_state_loaded: {\n      active_order_id: activeId,\n      order_status: $json.active_order_status || $json.session?.order_status || 'NONE',\n      pending_field: pendingField,\n      last_product_id: $json.loaded_last_product_id || $json.session?.last_product_id || null,\n      conversation_mode: $json.session?.conversation_mode || 'FAQ',\n    },\n    explicit_intent: explicitPriceSignal ? 'PRICE' : (explicitSizeSignal ? 'SIZE' : (explicitColorSignal ? 'COLOR' : (deliveryTimeSignal ? 'DELIVERY_TIME' : (explicitDeliverySignal ? 'DELIVERY' : null)))),\n    resolved_intent: handled ? intent : null,\n    state_changes: abandonedOrderId ? ['draft_abandoned', 'active_order_cleared', 'pending_fields_cleared'] : [],\n    order_changes: abandonedOrderId ? { order_id: abandonedOrderId, status: 'ABANDONED', reason: 'draft_ttl_expired' } : null,\n    state_saved: true,\n  };\n  if (handled && messageId) {\n    store.processed_order_messages[messageId] = { processed_at: Date.now(), order_id: order?.order_id || null, result: output };\n  }\n  return { ...$json, ...output };\n});\n\nreturn [{ json: result }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         940,
         -60
+      ],
+      "id": "1a3d3a10-0060-4b11-8001-000000000060",
+      "name": "Order Sales State Machine"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "boolean-condition",
+              "leftValue": "={{ $json.order_handled }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1180,
+        -60
+      ],
+      "id": "1a3d3a10-0061-4b11-8001-000000000061",
+      "name": "Order Handled?"
+    },
+    {
+      "parameters": {
+        "jsCode": "function normalize(value) {\n  return String(value || '')\n    .normalize('NFD')\n    .replace(/[\\u0300-\\u036f]/g, '')\n    .toLowerCase()\n    .replace(/[’']/g, ' ')\n    .replace(/[^a-z0-9\\u0600-\\u06ff]+/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nfunction containsPhrase(text, phrase) {\n  const normalizedPhrase = normalize(phrase);\n  return Boolean(normalizedPhrase) && (' ' + text + ' ').includes(' ' + normalizedPhrase + ' ');\n}\n\nfunction detectLanguage(raw, storedLanguage, defaultLanguage) {\n  const text = normalize(raw);\n  const stored = ['darija', 'arabic', 'french', 'english'].includes(storedLanguage) ? storedLanguage : null;\n  if (/^(hi|hello|hey)( there)?$/.test(text)) return 'english';\n  if (/^(bonjour|bonsoir|salut|bjr)$/.test(text)) return 'french';\n  if (/^(salam|slm|salam alaykom|salam alikom|salam alaikom|salam 3likom)$/.test(text)) return 'darija';\n  if (/^(السلام عليكم|سلام)$/.test(text)) return 'darija';\n  if (/\\b(salam|wach|bghit|bnisba|chno|chnu|taman|ch7al|chhal|twsil|tawssil|fabor|3ndkom|kayn|kayna|mzyan|nkhtar|nkhless|nchri|nakhod|lbyed|k7el|ke7el)\\b/.test(text)) return 'darija';\n  if (/واش|بغيت|شنو|شحال|كاين|كاينة|مزيان|نختار|نكحل|بالنسبة/.test(text)) return 'darija';\n  if (/\\b(quel|quelle|quels|quelles|combien|avez|vous|est ce|je voudrais|pouvez|pourquoi|comment)\\b/.test(text)) return 'french';\n  if (/\\b(what|which|who|how much|do you|can you|i want|please|available|create|write|read|show|ignore|script)\\b/.test(text)) return 'english';\n  if (/[\\u0600-\\u06ff]/.test(raw)) return 'arabic';\n  if (stored) return stored;\n  return ['darija', 'arabic', 'french', 'english'].includes(defaultLanguage) ? defaultLanguage : 'darija';\n}\n\nfunction pickLanguageMap(map, language, fallback) {\n  return String(map?.[language] || map?.darija || map?.english || fallback || '');\n}\n\nfunction productForAi(product) {\n  if (!product) return null;\n  return {\n    id: product.id,\n    name: product.name,\n    category: product.category,\n    catalogued: product.catalogued,\n    price: product.price,\n    currency: product.currency,\n    sizes: product.sizes,\n    colors: product.colors,\n    material: product.material,\n    features: product.features,\n    delivery: product.delivery,\n    payment: product.payment,\n    stock_status: product.stock_status,\n  };\n}\n\nfunction featureText(product, language) {\n  const values = Array.isArray(product?.features) ? product.features : [];\n  const result = [];\n  for (const value of values) {\n    const feature = normalize(value);\n    if (feature.includes('double face') || feature.includes('reversible')) {\n      result.push({ darija: 'double face وكتلبس على جوج وجوه', arabic: 'قابلة للارتداء على الوجهين', french: 'réversible / double face', english: 'reversible / double face' }[language]);\n    } else if (feature === 'cotton') {\n      result.push({ darija: 'بالقطن', arabic: 'من القطن', french: 'en coton', english: 'cotton' }[language]);\n    } else if (feature.includes('good quality')) {\n      result.push({ darija: 'بجودة مزيانة', arabic: 'بجودة جيدة', french: 'de bonne qualité', english: 'good quality' }[language]);\n    } else if (feature.includes('pilling') || feature.includes('مكيحببش')) {\n      result.push({ darija: 'مسوّق على أنه مكيحببش', arabic: 'مسوّق على أنه مقاوم للتكوّر', french: 'présenté comme résistant au boulochage', english: 'marketed as resistant to pilling' }[language]);\n    }\n  }\n  return result.filter(Boolean);\n}\n\nfunction colorListText(colors, language) {\n  const labels = {\n    Black: { darija: 'الأسود 🖤', arabic: 'الأسود 🖤', french: 'noir 🖤', english: 'Black 🖤' },\n    White: { darija: 'الأبيض 🤍', arabic: 'الأبيض 🤍', french: 'blanc 🤍', english: 'White 🤍' },\n  };\n  const localized = (colors || []).map((color) => labels[color]?.[language] || String(color));\n  const connector = language === 'french' ? ' et ' : (language === 'english' ? ' and ' : ' و');\n  return localized.join(connector);\n}\n\nconst rawMessage = String($json.message_text || '');\nconst message = normalize(rawMessage);\nconst config = $json.store_config || {};\nconst products = Array.isArray($json.products) ? $json.products : [];\nconst faq = Array.isArray($json.faq) ? $json.faq : [];\nconst storedLanguage = $json.session?.preferred_language || $json.session?.language;\nconst language = detectLanguage(rawMessage, storedLanguage, config.default_language);\nconst productNames = products.map((item) => item.name);\nconst productNamesForLanguage = language === 'french'\n  ? productNames.join(' ou ')\n  : (language === 'english' ? productNames.join(' or ') : productNames.join(' ولا '));\nconst outOfScopeReply = pickLanguageMap(config.out_of_scope_messages, language,\n  'مرحبا 👋 نقدر نعاونك غير بمنتوجات وخدمات المتجر.');\nconst handoffReply = pickLanguageMap(config.handoff_messages, language,\n  'هاد المعلومة خاص المسؤول يأكدها ليك. نقدر نخلي ليه طلبك.');\n\nconst colorAliases = {\n  Black: ['black', 'noir', 'noire', 'k7el', 'ke7el', 'k7l', 'k7la', 'ke7la', 'كحل', 'كحلة', 'أسود', 'اسود'],\n  White: ['white', 'blanc', 'blanche', 'byd', 'byed', 'beyd', 'byda', 'lbyed', 'lbeyd', 'بياض', 'بيض', 'بيضة', 'أبيض', 'ابيض'],\n};\nlet requestedColor = null;\nfor (const [canonical, aliases] of Object.entries(colorAliases)) {\n  if (aliases.some((alias) => containsPhrase(message, alias))) requestedColor = canonical;\n}\nconst unsupportedColorAliases = ['red', 'rouge', 'rouges', '7mer', 'hamra', 'حمر', 'حمرا', 'أحمر', 'احمر'];\nconst unsupportedColor = unsupportedColorAliases.find((alias) => containsPhrase(message, alias)) || null;\n\nconst matchEntries = [];\nfor (const product of products) {\n  let best = null;\n  for (const candidateRaw of [product.name, ...(product.aliases || [])]) {\n    const candidate = normalize(candidateRaw);\n    if (!candidate) continue;\n    const candidateTokens = candidate.split(' ');\n    const position = (' ' + message + ' ').indexOf(' ' + candidate + ' ');\n    const allTokensPresent = candidateTokens.every((token) => containsPhrase(message, token));\n    if (position < 0 && !allTokensPresent) continue;\n    const exact = message === candidate;\n    const score = exact ? 1000 : candidateTokens.length * 100;\n    const foundAt = position >= 0 ? position : 9999;\n    if (!best || score > best.score || (score === best.score && foundAt < best.position)) {\n      best = { product, score, position: foundAt };\n    }\n  }\n  if (best) matchEntries.push(best);\n}\nmatchEntries.sort((a, b) => b.score - a.score || a.position - b.position || a.product.id.localeCompare(b.product.id));\n\nconst comparisonConnector = /\\b(compare|comparison|difference|versus|vs|or|ou|wla|wala|a7san|better|best)\\b|ولا|مقارنة|الفرق|احسن|أحسن/i.test(rawMessage);\nconst explicitProductIds = [...new Set(matchEntries.map((entry) => entry.product.id))];\nlet ambiguousProduct = false;\nlet matchedProducts = [];\nif (explicitProductIds.length > 1 && comparisonConnector) {\n  matchedProducts = explicitProductIds.map((id) => products.find((item) => item.id === id)).filter(Boolean);\n} else if (explicitProductIds.length > 1) {\n  const leading = matchEntries[0];\n  const tied = matchEntries.filter((entry) => entry.score === leading.score && entry.position === leading.position);\n  if (tied.length > 1) {\n    ambiguousProduct = true;\n    matchedProducts = tied.map((entry) => entry.product);\n  } else {\n    matchedProducts = [leading.product];\n  }\n} else if (matchEntries[0]) {\n  matchedProducts = [matchEntries[0].product];\n}\n\nlet productFromContext = false;\nlet productResolutionSource = matchedProducts.length ? 'explicit_current_message' : 'none';\nif (!matchedProducts.length && !ambiguousProduct) {\n  const contextualId = $json.active_order_product_id\n    || $json.pending_product_id\n    || $json.session?.active_order_product_id\n    || $json.session?.pending_product_id\n    || $json.session?.last_product_id;\n  const previous = products.find((item) => item.id === contextualId);\n  if (previous) {\n    matchedProducts = [previous];\n    productFromContext = true;\n    productResolutionSource = ($json.active_order_product_id || $json.session?.active_order_product_id) === previous.id\n      ? 'active_order'\n      : (($json.pending_product_id || $json.session?.pending_product_id) === previous.id ? 'pending_product' : 'last_product');\n  }\n}\nconst product = matchedProducts.length === 1 ? matchedProducts[0] : null;\n\nconst securityPattern = /ignore (all |any )?(previous|prior)|ignore (the )?instructions|system prompt|developer message|api[ -]?key|access token|app secret|secret key|environment variable|show .*env|read .*env|\\.env|execute (this|a|the) command|run (this|a|the) command|act as chatgpt|jailbreak|reveal .*prompt|show .*credential|كلمة السر|المفتاح السري/i;\nconst irrelevantPattern = /\\b(messi|ronaldo|python|javascript|homework|politic|politics|election|president|weather|malware|ransomware|virus|hack|recipe|movie|football score)\\b|اكتب.*كود|سياسة|الطقس|واجب مدرسي/i;\nconst greetingPattern = /^(salam|slm|salam alaykom|salam alikom|salam alaikom|salam 3likom|hello|hi|hey|bonjour|bonsoir|salut|bjr|السلام عليكم|سلام|مرحبا)[!. ]*$/i;\nconst enquiryPattern = /^(bghit nswlk|wach momkin nswlk|momkin nswlk|je peux demander|i have a question|عندي سؤال|ممكن نسولك)[?.! ]*$/i;\nconst humanPattern = /\\b(human|agent|person|support|responsable|chi wahed|nhder m3a|reclamation|complaint|order issue|payment issue)\\b|مسؤول|انسان|إنسان|شكاية|مشكل فالطلب|مشكل في الطلب|مشكل في الدفع/i;\nconst returnSignal = /\\b(return|refund|exchange|retour|remboursement|echange|nrje3|nbdel)\\b|ترجيع|استرجاع|تبديل/i.test(message);\nconst priceSignal = /\\b(price|cost|prix|combien|ch7al|chhal|taman|tamane)\\b|بشحال|شحال|الثمن|ثمن|السعر/i.test(message);\nconst deliveryTimeSignal = /\\b(delivery time|combien.*jour|delai|délai|ch7al\\s+(?:fach|fash)\\s+(?:twslni|twselni)|(?:fach|fash)\\s+(?:twslni|twselni))\\b/i.test(rawMessage) || /مدة|فاش غتوصلني|امتى.*توصيل/i.test(rawMessage);\nconst sizeWordSignal = /\\b(size|sizes|taille|tailles|9yas|9yassat)\\b|قياس|مقاس|المقاس|المقاسات/i.test(message);\nconst explicitSize = (rawMessage.match(/\\b(XXL|XL|XS|S|M|L)\\b/) || [])[1]\n  || (sizeWordSignal ? (message.match(/\\b(xxl|xl|xs|s|m|l)\\b/) || [])[1] : null)\n  || null;\nconst requestedSize = explicitSize ? explicitSize.toUpperCase() : null;\nconst sizingAdviceSignal = /\\b(what size|which size|recommend.*size|taille.*prendre|taille.*nakhod|chno taille|1[.,][0-9]{2}m?)\\b|شنو.*مقاس|طولي/i.test(message);\nconst colorWordSignal = /\\b(color|colors|colour|couleur|couleurs|lawn|lon|lwan)\\b|لون|اللون|الألوان|الوان/i.test(message);\nconst colorSignal = colorWordSignal || Boolean(requestedColor) || Boolean(unsupportedColor);\nconst deliverySignal = /\\b(delivery|shipping|livraison|livrez|tawsil|tawssil|twsil|twsel|fabor|gratuit|gratuite|free delivery)\\b|توصيل|التوصيل|الشحن|مجاني/i.test(message);\nconst paymentSignal = /\\b(payment|pay|cod|cash on delivery|paiement|payer|nkhless|khlass|before paying|inspect|check before)\\b|الدفع|نخلص|الاستلام|نشوفو|نفحص/i.test(message);\nconst availabilitySignal = /\\b(stock|available|availability|disponible|disponibilite|kayn|kayna|3ndkom|reste)\\b|متوفر|متوفرة|المخزون|كاين|كاينة/i.test(message);\nconst qualitySignal = /\\b(quality|qualite|kality|good|mzyan|pilling)\\b|الجودة|جودة|مزيان|كاليتي|مكيحببش|يحبب/i.test(message);\nconst materialSignal = /\\b(matiere|material|cotton|coton|fabric|tissu|100)\\b|قطن|ثوب|مادة|الخامة/i.test(message);\nconst orderSignal = /\\b(order|buy|purchase|commander|acheter|commande|ncommandi|nchri|bghit nakhod|bghit nchri)\\b|بغيت نشري|بغيت ناخد|نطلب|نشري|طلب/i.test(message);\nconst comparisonSignal = comparisonConnector && matchedProducts.length > 1;\nconst acknowledgementSignal = /^(ok|okay|sf|safi|nadi|wakha|ah|ahh|تمام|واخا|صافي|اه)[!. ]*$/i.test(rawMessage.trim());\n\nlet faqMatch = null;\nlet faqScore = 0;\nfor (const entry of faq) {\n  let score = 0;\n  for (const keyword of entry.keywords || []) {\n    const normalizedKeyword = normalize(keyword);\n    if (normalizedKeyword && containsPhrase(message, normalizedKeyword)) score += normalizedKeyword.split(' ').length;\n  }\n  if (score > faqScore) {\n    faqMatch = entry;\n    faqScore = score;\n  }\n}\n\nlet intent = 'UNKNOWN_STORE_QUERY';\nif ($json.message_type === 'image') intent = 'PRODUCT_INFO';\nelse if (securityPattern.test(rawMessage) || irrelevantPattern.test(rawMessage)) intent = 'OUT_OF_SCOPE';\nelse if (humanPattern.test(rawMessage) || returnSignal) intent = 'HUMAN_HANDOFF';\nelse if (greetingPattern.test(rawMessage) || enquiryPattern.test(rawMessage)) intent = 'GREETING';\nelse if (acknowledgementSignal) intent = 'ACKNOWLEDGEMENT';\nelse if (comparisonSignal) intent = 'PRODUCT_COMPARISON';\nelse if (deliveryTimeSignal) intent = 'DELIVERY_TIME';\nelse if (priceSignal) intent = 'PRICE';\nelse if (sizingAdviceSignal || sizeWordSignal || requestedSize) intent = 'SIZE';\nelse if (colorSignal) intent = 'COLOR';\nelse if (deliverySignal) intent = 'DELIVERY';\nelse if (paymentSignal) intent = 'PAYMENT';\nelse if (availabilitySignal) intent = 'AVAILABILITY';\nelse if (qualitySignal) intent = 'QUALITY';\nelse if (materialSignal) intent = 'MATERIAL';\nelse if (orderSignal) intent = 'ORDER';\nelse if (product) intent = 'PRODUCT_INFO';\n\nconst shoppingSignal = /\\b(product|produit|article|store|shop|magasin|boutique|model|modele|bghit|nkhtar|bard|price|prix|taille|livraison|commande|quality|qualite)\\b|منتوج|منتج|متجر|موديل|بغيت|نختار|ثمن|مقاس|توصيل|طلب|جودة/i.test(message);\nconst storeSignal = Boolean(product)\n  || matchedProducts.length > 1\n  || productFromContext\n  || faqScore > 0\n  || shoppingSignal\n  || acknowledgementSignal || deliveryTimeSignal || priceSignal || sizeWordSignal || colorSignal || deliverySignal || paymentSignal\n  || availabilitySignal || qualitySignal || materialSignal || orderSignal;\nif (intent === 'UNKNOWN_STORE_QUERY' && !storeSignal) intent = 'OUT_OF_SCOPE';\nconst relevant = intent !== 'OUT_OF_SCOPE';\n\nlet reply = '';\nlet shouldHandoff = false;\nlet aiNeeded = false;\nlet decisionReason = '';\nlet routingOutcome = relevant ? 'RELEVANT_UNCERTAIN' : 'OUT_OF_SCOPE';\n\nconst greetingReplies = {\n  darija: 'مرحبا 👋 شنو نقدر نعاونك فيه؟',\n  arabic: 'مرحبًا 👋 كيف يمكنني مساعدتك؟',\n  french: 'Bonjour 👋 Comment puis-je vous aider ?',\n  english: 'Hi 👋 How can I help?',\n};\nconst imageReplies = {\n  darija: 'توصلنا بالصورة 👍 ما كنحدّدوش المنتوج من الصورة. شنو كتقصد: ' + productNamesForLanguage + '؟',\n  arabic: 'وصلتنا الصورة 👍 لا نحدد المنتج من الصورة. أي منتج تقصد: ' + productNamesForLanguage + '؟',\n  french: 'Image reçue 👍 Nous n’identifions pas le produit depuis l’image. Lequel voulez-vous dire : ' + productNamesForLanguage + ' ?',\n  english: 'Image received 👍 We do not identify products from images. Which do you mean: ' + productNamesForLanguage + '?',\n};\nconst clarificationReplies = {\n  darija: 'أكيد 👌 شنو المنتوج اللي كتقصد: ' + productNamesForLanguage + '؟',\n  arabic: 'بالتأكيد 👌 أي منتج تقصد: ' + productNamesForLanguage + '؟',\n  french: 'Bien sûr 👌 Quel produit voulez-vous dire : ' + productNamesForLanguage + ' ?',\n  english: 'Sure 👌 Which product do you mean: ' + productNamesForLanguage + '?',\n};\n\nif (!relevant) {\n  reply = outOfScopeReply;\n  decisionReason = 'out_of_scope_or_security';\n} else if ($json.message_type === 'image') {\n  if (productFromContext && product) {\n    reply = pickLanguageMap({\n      darija: 'توصلنا بالصورة 👍 ما كنحدّدوش المنتوج منها. واش السؤال ديالك على ' + product.name + '؟',\n      arabic: 'وصلتنا الصورة 👍 لا نحدد المنتج منها. هل سؤالك عن ' + product.name + '؟',\n      french: 'Image reçue 👍 Nous ne l’utilisons pas pour identifier le produit. Votre question concerne ' + product.name + ' ?',\n      english: 'Image received 👍 We do not use it to identify the product. Is your question about ' + product.name + '?',\n    }, language);\n  } else {\n    reply = pickLanguageMap(imageReplies, language);\n  }\n  decisionReason = 'deterministic_image_clarification';\n} else if (intent === 'GREETING') {\n  reply = pickLanguageMap(greetingReplies, language);\n  decisionReason = 'deterministic_greeting';\n  routingOutcome = 'RELEVANT_UNDERSTOOD';\n} else if (intent === 'ACKNOWLEDGEMENT') {\n  reply = pickLanguageMap({ darija: 'واخا 👍', arabic: 'حسنًا 👍', french: 'D’accord 👍', english: 'Okay 👍' }, language);\n  decisionReason = 'deterministic_acknowledgement_no_state_change';\n  routingOutcome = 'RELEVANT_UNDERSTOOD';\n} else if (intent === 'DELIVERY_TIME') {\n  const eta = config.delivery?.estimated_time || (config.delivery?.estimated_days ? String(config.delivery.estimated_days) + ' days' : null);\n  reply = eta\n    ? pickLanguageMap({ darija: 'مدة التوصيل المسجلة هي ' + eta + '.', arabic: 'مدة التوصيل المسجلة هي ' + eta + '.', french: 'Le délai de livraison indiqué est ' + eta + '.', english: 'The configured delivery time is ' + eta + '.' }, language)\n    : pickLanguageMap({ darija: 'المدة بالضبط خاص المسؤول يأكدها ليك 👍', arabic: 'يجب أن يؤكد مسؤول المتجر مدة التوصيل الدقيقة.', french: 'Le délai exact doit être confirmé par le vendeur.', english: 'The exact delivery time needs confirmation from the seller.' }, language);\n  decisionReason = 'deterministic_delivery_eta';\n  routingOutcome = 'RELEVANT_UNDERSTOOD';\n} else if (intent === 'HUMAN_HANDOFF') {\n  reply = handoffReply;\n  shouldHandoff = true;\n  decisionReason = 'customer_or_issue_requires_human';\n  routingOutcome = 'RELEVANT_UNDERSTOOD';\n} else if (ambiguousProduct) {\n  reply = pickLanguageMap(clarificationReplies, language);\n  decisionReason = 'deterministic_product_clarification';\n} else if (['PRICE', 'SIZE', 'COLOR', 'PAYMENT', 'AVAILABILITY', 'QUALITY', 'MATERIAL', 'PRODUCT_INFO'].includes(intent) && !product) {\n  reply = pickLanguageMap(clarificationReplies, language);\n  decisionReason = 'deterministic_missing_product_clarification';\n} else if (intent === 'PRICE' && product) {\n  const sizes = product.sizes.length ? product.sizes.join(', ') : '';\n  const freeDelivery = product.delivery?.free === true;\n  reply = pickLanguageMap({\n    darija: product.name + ' بـ' + product.price + 'dh 🔥' + (freeDelivery ? ' والتوصيل فابور حتى لباب الدار 🚚' : '') + (sizes ? ' المقاسات ' + sizes + ' ✅' : ''),\n    arabic: 'سعر ' + product.name + ' هو ' + product.price + ' ' + product.currency + (freeDelivery ? '، والتوصيل مجاني حتى باب المنزل 🚚' : '') + (sizes ? ' المقاسات: ' + sizes + ' ✅' : ''),\n    french: product.name + ' coûte ' + product.price + ' ' + product.currency + (freeDelivery ? ', avec livraison gratuite jusqu’à votre porte 🚚' : '') + (sizes ? '. Tailles : ' + sizes + ' ✅' : ''),\n    english: product.name + ' costs ' + product.price + ' ' + product.currency + (freeDelivery ? ', with free delivery to your door 🚚' : '') + (sizes ? '. Sizes: ' + sizes + ' ✅' : ''),\n  }, language);\n  decisionReason = 'deterministic_product_price';\n  routingOutcome = 'RELEVANT_UNDERSTOOD';\n} else if (intent === 'SIZE' && product) {\n  const sizes = product.sizes.join(', ');\n  if (!sizes) {\n    reply = pickLanguageMap({\n      darija: 'المقاسات ديال ' + product.name + ' ما عنديش عليها معلومة مؤكدة دابا. نقدر نخلي المسؤول يأكدها ليك 👍',\n      arabic: 'لا تتوفر لدي معلومات مؤكدة عن مقاسات ' + product.name + '. يمكن لمسؤول المتجر تأكيدها.',\n      french: 'Je n’ai pas d’information confirmée sur les tailles de ' + product.name + '. L’équipe peut les confirmer.',\n      english: 'I do not have confirmed size information for ' + product.name + '. The store team can confirm it.',\n    }, language);\n    shouldHandoff = true;\n    decisionReason = 'deterministic_unknown_sizes';\n  } else if (sizingAdviceSignal) {\n    reply = pickLanguageMap({\n      darija: 'المقاسات المسجلة ديال ' + product.name + ' هي ' + sizes + '. ما عنديش جدول قياسات مؤكد باش نختار حسب الطول؛ نقدر نخلي المسؤول يعاونك 👍',\n      arabic: 'المقاسات المسجلة لـ ' + product.name + ' هي ' + sizes + '، ولا يتوفر جدول قياسات مؤكد للاختيار حسب الطول.',\n      french: 'Les tailles indiquées pour ' + product.name + ' sont ' + sizes + '. Je n’ai pas de guide confirmé pour choisir selon la taille.',\n      english: 'The listed sizes for ' + product.name + ' are ' + sizes + '. I do not have a confirmed chart for height-based advice.',\n    }, language);\n    shouldHandoff = true;\n    decisionReason = 'deterministic_no_sizing_chart';\n  } else {\n    reply = pickLanguageMap({\n      darija: 'المقاسات ديال ' + product.name + ': ' + sizes + ' ✅',\n      arabic: 'مقاسات ' + product.name + ': ' + sizes + ' ✅',\n      french: 'Tailles de ' + product.name + ' : ' + sizes + ' ✅',\n      english: product.name + ' sizes: ' + sizes + ' ✅',\n    }, language);\n    decisionReason = 'deterministic_sizes';\n    routingOutcome = 'RELEVANT_UNDERSTOOD';\n  }\n} else if (intent === 'COLOR' && product) {\n  const listed = product.colors || [];\n  const listedText = colorListText(listed, language);\n  const requestedIsListed = requestedColor && listed.includes(requestedColor);\n  const stockUnknown = product.stock_status === 'unknown';\n  if (!listed.length) {\n    reply = pickLanguageMap({\n      darija: 'الألوان ديال ' + product.name + ' ما عنديش عليها معلومة مؤكدة. نقدر نخلي المسؤول يأكدها ليك 👍',\n      arabic: 'لا تتوفر لدي معلومات مؤكدة عن ألوان ' + product.name + '. يمكن لمسؤول المتجر تأكيدها.',\n      french: 'Je n’ai pas d’information confirmée sur les couleurs de ' + product.name + '. L’équipe peut les confirmer.',\n      english: 'I do not have confirmed color information for ' + product.name + '. The store team can confirm it.',\n    }, language);\n    shouldHandoff = true;\n    decisionReason = 'deterministic_unknown_colors';\n  } else if (unsupportedColor || (requestedColor && !requestedIsListed)) {\n    reply = pickLanguageMap({\n      darija: product.name + ' كاينة غير بهاد الألوان: ' + listedText,\n      arabic: product.name + ' متوفرة بالألوان المسجلة فقط: ' + listedText,\n      french: product.name + ' est proposée uniquement dans ces couleurs : ' + listedText,\n      english: product.name + ' is listed only in these colors: ' + listedText,\n    }, language);\n    decisionReason = 'deterministic_unsupported_color';\n    routingOutcome = 'RELEVANT_UNDERSTOOD';\n  } else if (requestedIsListed) {\n    const colorText = requestedColor === 'Black'\n      ? { darija: 'بالأسود 🖤', arabic: 'بالأسود 🖤', french: 'en noir 🖤', english: 'in Black 🖤' }\n      : { darija: 'بالأبيض 🤍', arabic: 'بالأبيض 🤍', french: 'en blanc 🤍', english: 'in White 🤍' };\n    const stockText = stockUnknown\n      ? { darija: ' وبالنسبة للستوك الحالي نقدر نأكدها ليك مع المسؤول.', arabic: ' ويمكن لمسؤول المتجر تأكيد المخزون الحالي.', french: ' L’équipe peut confirmer le stock actuel.', english: ' The store team can confirm current stock.' }\n      : { darija: '', arabic: '', french: '', english: '' };\n    reply = product.name + ' ' + colorText[language] + stockText[language];\n    shouldHandoff = false;\n    decisionReason = 'deterministic_requested_color';\n    routingOutcome = 'RELEVANT_UNDERSTOOD';\n  } else if (listed.length) {\n    reply = pickLanguageMap({\n      darija: 'الألوان ديال ' + product.name + ': ' + listedText,\n      arabic: 'ألوان ' + product.name + ': ' + listedText,\n      french: 'Couleurs de ' + product.name + ' : ' + listedText,\n      english: product.name + ' colors: ' + listedText,\n    }, language);\n    decisionReason = 'deterministic_colors';\n    routingOutcome = 'RELEVANT_UNDERSTOOD';\n  }\n} else if (intent === 'DELIVERY') {\n  const delivery = product?.delivery || config.delivery;\n  if (delivery?.free === true || Number(delivery?.price_mad) === 0) {\n    reply = pickLanguageMap({\n      darija: 'التوصيل فابور حتى لباب الدار 🚚',\n      arabic: 'التوصيل مجاني حتى باب المنزل 🚚',\n      french: 'La livraison est gratuite jusqu’à votre porte 🚚',\n      english: 'Delivery is free to your door 🚚',\n    }, language);\n    decisionReason = 'deterministic_delivery';\n    routingOutcome = 'RELEVANT_UNDERSTOOD';\n  }\n} else if (intent === 'PAYMENT' && product) {\n  if (product.payment?.inspect_before_payment === true) {\n    reply = pickLanguageMap({\n      darija: 'بالنسبة لـ ' + product.name + '، تقدر تشوف وتفحص المنتوج قبل ما تخلص 👍',\n      arabic: 'بالنسبة إلى ' + product.name + '، يمكنك فحص المنتج قبل الدفع 👍',\n      french: 'Pour ' + product.name + ', vous pouvez vérifier le produit avant de payer 👍',\n      english: 'For ' + product.name + ', you can inspect the product before paying 👍',\n    }, language);\n    decisionReason = 'deterministic_payment';\n    routingOutcome = 'RELEVANT_UNDERSTOOD';\n  } else {\n    reply = pickLanguageMap({\n      darija: 'شروط الأداء ديال ' + product.name + ' ما عنديش عليها معلومة مؤكدة. نقدر نخلي المسؤول يأكدها ليك 👍',\n      arabic: 'لا تتوفر لدي معلومات مؤكدة عن شروط الدفع لهذا المنتج. يمكن لمسؤول المتجر تأكيدها.',\n      french: 'Je n’ai pas d’information confirmée sur les conditions de paiement de ce produit. L’équipe peut les confirmer.',\n      english: 'I do not have confirmed payment terms for this product. The store team can confirm them.',\n    }, language);\n    shouldHandoff = true;\n    decisionReason = 'deterministic_unknown_payment_fact';\n  }\n} else if (intent === 'AVAILABILITY' && product) {\n  const sizes = product.sizes.length ? product.sizes.join(', ') : '';\n  if (product.stock_status === 'in_stock') {\n    reply = pickLanguageMap({ darija: product.name + ' متوفرة دابا ✅', arabic: product.name + ' متوفرة حاليًا ✅', french: product.name + ' est en stock ✅', english: product.name + ' is in stock ✅' }, language);\n    decisionReason = 'deterministic_in_stock';\n  } else if (product.stock_status === 'out_of_stock') {\n    reply = pickLanguageMap({ darija: product.name + ' ما متوفراش دابا.', arabic: product.name + ' غير متوفرة حاليًا.', french: product.name + ' est en rupture de stock.', english: product.name + ' is currently out of stock.' }, language);\n    decisionReason = 'deterministic_out_of_stock';\n  } else {\n    reply = pickLanguageMap({\n      darija: product.name + ' كاينة عندنا فالكاتالوغ 👍' + (sizes ? ' المقاسات المسجلة ' + sizes + '.' : '') + ' بالنسبة للستوك الحالي نقدر نأكدها ليك مع المسؤول.',\n      arabic: product.name + ' موجودة في الكتالوج 👍' + (sizes ? ' المقاسات المسجلة: ' + sizes + '.' : '') + ' يمكن لمسؤول المتجر تأكيد المخزون الحالي.',\n      french: product.name + ' figure dans notre catalogue 👍' + (sizes ? ' Tailles indiquées : ' + sizes + '.' : '') + ' L’équipe peut confirmer le stock actuel.',\n      english: product.name + ' is in our catalogue 👍' + (sizes ? ' Listed sizes: ' + sizes + '.' : '') + ' The store team can confirm current stock.',\n    }, language);\n    shouldHandoff = true;\n    decisionReason = 'catalogued_stock_unknown';\n  }\n  routingOutcome = 'RELEVANT_UNDERSTOOD';\n} else if (intent === 'MATERIAL' && product) {\n  if (product.material) {\n    reply = pickLanguageMap({ darija: product.name + ' بالـ' + product.material + ' ✅', arabic: 'خامة ' + product.name + ': ' + product.material + ' ✅', french: product.name + ' est en ' + product.material + ' ✅', english: product.name + ' material: ' + product.material + ' ✅' }, language);\n    decisionReason = 'deterministic_material';\n    routingOutcome = 'RELEVANT_UNDERSTOOD';\n  } else {\n    reply = pickLanguageMap({\n      darija: 'بالنسبة لـ ' + product.name + '، ماعنديش معلومة مؤكدة على الخامة ولا واش 100% coton. نقدر نخلي المسؤول يأكدها ليك 👍',\n      arabic: 'لا تتوفر لدي معلومة مؤكدة عن خامة ' + product.name + ' أو ما إذا كانت 100% قطن. يمكن لمسؤول المتجر تأكيدها.',\n      french: 'Je n’ai pas d’information confirmée sur la matière de ' + product.name + ' ni sur une composition 100% coton. L’équipe peut la confirmer.',\n      english: 'I do not have confirmed material information for ' + product.name + ' or confirmation that it is 100% cotton. The store team can confirm it.',\n    }, language);\n    shouldHandoff = true;\n    decisionReason = 'deterministic_unknown_material_fact';\n  }\n} else if (intent === 'QUALITY' && product) {\n  const features = featureText(product, language);\n  const qualityFacts = features.filter((value) => /جودة|مزيانة|boulochage|qualité|quality|pilling|التكوّر/.test(value));\n  if (qualityFacts.length) {\n    reply = product.name + ': ' + qualityFacts.join('، ') + ' ✅';\n    decisionReason = 'deterministic_quality';\n    routingOutcome = 'RELEVANT_UNDERSTOOD';\n  } else {\n    reply = pickLanguageMap({\n      darija: 'ماعنديش وصف مؤكد أكثر على جودة ' + product.name + '. نقدر نخلي المسؤول يوضحها ليك 👍',\n      arabic: 'لا يتوفر لدي وصف مؤكد إضافي عن جودة ' + product.name + '. يمكن لمسؤول المتجر توضيحها.',\n      french: 'Je n’ai pas de description confirmée supplémentaire sur la qualité de ' + product.name + '. L’équipe peut vous renseigner.',\n      english: 'I do not have an additional confirmed quality description for ' + product.name + '. The store team can help.',\n    }, language);\n    shouldHandoff = true;\n    decisionReason = 'deterministic_unknown_quality_fact';\n  }\n} else if (intent === 'PRODUCT_INFO' && product) {\n  const features = featureText(product, language);\n  const sizes = product.sizes.length ? product.sizes.join(', ') : '';\n  reply = pickLanguageMap({\n    darija: product.name + ' بـ' + product.price + 'dh' + (features.length ? '، ' + features.join('، ') : '') + (sizes ? '. المقاسات ' + sizes : '') + (product.delivery?.free ? ' والتوصيل فابور 🚚' : ''),\n    arabic: product.name + ' بسعر ' + product.price + ' ' + product.currency + (features.length ? '، ' + features.join('، ') : '') + (sizes ? '. المقاسات: ' + sizes : '') + (product.delivery?.free ? ' والتوصيل مجاني 🚚' : ''),\n    french: product.name + ' à ' + product.price + ' ' + product.currency + (features.length ? ', ' + features.join(', ') : '') + (sizes ? '. Tailles : ' + sizes : '') + (product.delivery?.free ? '. Livraison gratuite 🚚' : ''),\n    english: product.name + ' at ' + product.price + ' ' + product.currency + (features.length ? ', ' + features.join(', ') : '') + (sizes ? '. Sizes: ' + sizes : '') + (product.delivery?.free ? '. Free delivery 🚚' : ''),\n  }, language);\n  decisionReason = 'deterministic_product_information';\n  routingOutcome = 'RELEVANT_UNDERSTOOD';\n} else if (intent === 'ORDER') {\n  const orderFaq = faq.find((entry) => entry.intent === 'order');\n  reply = String(orderFaq?.answers?.[language] || orderFaq?.answers?.darija || '');\n  decisionReason = 'deterministic_order_instructions';\n  routingOutcome = 'RELEVANT_UNDERSTOOD';\n}\n\nif (!reply && relevant && (intent === 'PRODUCT_COMPARISON' || intent === 'UNKNOWN_STORE_QUERY' || storeSignal)) {\n  aiNeeded = true;\n  decisionReason = intent === 'PRODUCT_COMPARISON' ? 'comparison_requires_interpretation' : 'relevant_unresolved_question';\n  routingOutcome = 'RELEVANT_UNCERTAIN';\n}\nif (!reply && !aiNeeded) {\n  reply = outOfScopeReply;\n  decisionReason = 'deterministic_scope_prompt';\n  routingOutcome = 'OUT_OF_SCOPE';\n}\n\nlet relevantProductContext = matchedProducts.map(productForAi);\nif (aiNeeded && !relevantProductContext.length && intent === 'UNKNOWN_STORE_QUERY') {\n  relevantProductContext = products.map(productForAi);\n}\nconst aiStoreContext = {};\nif (deliverySignal) aiStoreContext.delivery = config.delivery || null;\nif (paymentSignal) aiStoreContext.cod_enabled = typeof config.cod_enabled === 'boolean' ? config.cod_enabled : null;\n\nreturn [{\n  json: {\n    ...$json,\n    normalized_message: message,\n    language,\n    preferred_language: language,\n    intent,\n    relevant,\n    routing_outcome: routingOutcome,\n    ai_needed: aiNeeded,\n    response_source: aiNeeded ? null : 'deterministic',\n    reply,\n    should_handoff: shouldHandoff,\n    decision_reason: decisionReason,\n    route_reason: decisionReason,\n    resolved_intent: intent,\n    matched_product_ids: matchedProducts.map((item) => item.id),\n    primary_product_id: product?.id || null,\n    product_from_context: productFromContext,\n    resolution_source: productResolutionSource,\n    requested_color: requestedColor,\n    last_bot_action: reply ? ('ANSWER_' + intent) : ($json.last_bot_action || null),\n    last_bot_question: reply ? null : ($json.last_bot_question || null),\n    ai_context: { products: relevantProductContext, store: aiStoreContext },\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1420,
+        40
       ],
       "id": "1a3d3a10-0040-4b11-8001-000000000040",
       "name": "Deterministic Security and Sales Router"
@@ -350,8 +617,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        1180,
-        -60
+        1660,
+        40
       ],
       "id": "1a3d3a10-0041-4b11-8001-000000000041",
       "name": "AI Required?"
@@ -363,8 +630,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1420,
-        -180
+        1900,
+        -100
       ],
       "id": "1a3d3a10-0042-4b11-8001-000000000042",
       "name": "Build Cloudflare AI Request"
@@ -397,8 +664,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        1660,
-        -180
+        2140,
+        -100
       ],
       "id": "1a3d3a10-0043-4b11-8001-000000000043",
       "name": "Cloudflare Configured?"
@@ -431,8 +698,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1900,
-        -260
+        2380,
+        -180
       ],
       "id": "1a3d3a10-0044-4b11-8001-000000000044",
       "name": "Call Cloudflare Workers AI",
@@ -443,26 +710,26 @@
     },
     {
       "parameters": {
-        "jsCode": "const base = $('Build Cloudflare AI Request').first().json;\nconst response = $json || {};\nconst config = base.store_config || {};\nconst language = ['darija', 'arabic', 'french', 'english'].includes(base.language) ? base.language : 'darija';\nconst technicalReply = String(\n  config.technical_error_messages?.[language]\n  || config.technical_error_messages?.darija\n  || 'سمح لينا، كاين مشكل تقني مؤقت. نقدر نخلي الطلب ديالك للمسؤول باش يجاوبك.',\n);\nconst handoffReply = String(\n  config.handoff_messages?.[language]\n  || config.handoff_messages?.darija\n  || technicalReply,\n);\n\nfunction failure(status) {\n  return [{\n    json: {\n      ...base,\n      reply: status === 'model_requested_handoff' ? handoffReply : technicalReply,\n      should_handoff: true,\n      response_source: 'deterministic',\n      ai_status: status,\n    },\n  }];\n}\n\nif (!base.ai_configuration_valid) return failure('configuration_missing');\nconst statusCode = Number(response.statusCode || response.status || response.error?.statusCode || 0);\nif (statusCode === 429) return failure('rate_limited');\nif (statusCode >= 500) return failure('provider_server_error');\nif (response.error || response.success === false) return failure('provider_error');\n\nlet output = response.result?.response;\nif (typeof output !== 'string') return failure('invalid_provider_response');\noutput = output.trim();\nconst fence = String.fromCharCode(96).repeat(3);\nif (output.startsWith(fence)) {\n  output = output.slice(fence.length).replace(/^json\\s*/i, '').trim();\n  if (output.endsWith(fence)) output = output.slice(0, -fence.length).trim();\n}\nlet parsed = null;\ntry {\n  parsed = JSON.parse(output);\n} catch (_) {\n  parsed = null;\n}\nif (!parsed || typeof parsed.reply !== 'string' || parsed.grounded !== true) {\n  return failure('invalid_model_output');\n}\nif (parsed.should_handoff === true) return failure('model_requested_handoff');\n\nconst reply = parsed.reply.trim();\nconst maxCharacters = Math.min(700, Number(config.reply_max_characters || 700));\nlet valid = reply.length > 0 && reply.length <= maxCharacters;\nif (/password|access token|api key|app secret|credential|system prompt|environment variable|\\.env/i.test(reply)) valid = false;\n\nconst trustedText = JSON.stringify(base.ai_context || {}).toLowerCase();\nconst customerText = String(base.normalized_message || '').toLowerCase();\nfor (const claim of reply.match(/\\d+(?:[.,:-]\\d+)*/g) || []) {\n  if (!trustedText.includes(claim.toLowerCase()) && !customerText.includes(claim.toLowerCase())) valid = false;\n}\nconst guardedClaims = [\n  ['xxl', 'xxxl'],\n  ['warranty', 'garantie', 'guarantee'],\n  ['discount', 'promotion', 'promo', 'remise'],\n  ['original', 'authentic', 'authentique'],\n  ['waterproof', 'etanche', 'étanche'],\n  ['black', 'white', 'red', 'blue', 'green', 'noir', 'blanc', 'rouge', 'bleu', 'vert'],\n  ['100% cotton', '100% coton'],\n];\nconst replyLower = reply.toLowerCase();\nfor (const terms of guardedClaims) {\n  if (terms.some((term) => replyLower.includes(term)) && !terms.some((term) => trustedText.includes(term))) valid = false;\n}\nif (!valid) return failure('grounding_validation_failed');\n\nreturn [{\n  json: {\n    ...base,\n    reply,\n    should_handoff: false,\n    response_source: 'cloudflare_ai',\n    ai_status: 'success',\n  },\n}];"
+        "jsCode": "const base = $('Build Cloudflare AI Request').first().json;\nconst response = $json || {};\nconst config = base.store_config || {};\nconst language = ['darija', 'arabic', 'french', 'english'].includes(base.language) ? base.language : 'darija';\nconst technicalReply = String(\n  config.technical_error_messages?.[language]\n  || config.technical_error_messages?.darija\n  || 'سمح لينا، كاين مشكل تقني مؤقت. نقدر نخلي الطلب ديالك للمسؤول باش يجاوبك.',\n);\nconst handoffReply = String(\n  config.handoff_messages?.[language]\n  || config.handoff_messages?.darija\n  || technicalReply,\n);\n\nfunction failure(status) {\n  return [{\n    json: {\n      ...base,\n      reply: status === 'model_requested_handoff' ? handoffReply : technicalReply,\n      should_handoff: true,\n      response_source: 'deterministic',\n      ai_status: status,\n    },\n  }];\n}\n\nif (!base.ai_configuration_valid) return failure('configuration_missing');\nconst statusCode = Number(response.statusCode || response.status || response.error?.statusCode || 0);\nif (statusCode === 429) return failure('rate_limited');\nif (statusCode >= 500) return failure('provider_server_error');\nif (response.error || response.success === false) return failure('provider_error');\n\nlet output = response.result?.response;\nif (typeof output !== 'string') return failure('invalid_provider_response');\noutput = output.trim();\nconst fence = String.fromCharCode(96).repeat(3);\nif (output.startsWith(fence)) {\n  output = output.slice(fence.length).replace(/^json\\s*/i, '').trim();\n  if (output.endsWith(fence)) output = output.slice(0, -fence.length).trim();\n}\nlet parsed = null;\ntry {\n  parsed = JSON.parse(output);\n} catch (_) {\n  parsed = null;\n}\nif (!parsed || typeof parsed.reply !== 'string' || parsed.grounded !== true) {\n  return failure('invalid_model_output');\n}\nif (parsed.should_handoff === true) return failure('model_requested_handoff');\n\nconst reply = parsed.reply.trim();\nconst maxCharacters = Math.min(700, Number(config.reply_max_characters || 700));\nlet valid = reply.length > 0 && reply.length <= maxCharacters;\nif (/password|access token|api key|app secret|credential|system prompt|environment variable|\\.env/i.test(reply)) valid = false;\n\nconst trustedText = JSON.stringify(base.ai_context || {}).toLowerCase();\nconst customerText = String(base.normalized_message || '').toLowerCase();\nfor (const claim of reply.match(/\\d+(?:[.,:-]\\d+)*/g) || []) {\n  if (!trustedText.includes(claim.toLowerCase()) && !customerText.includes(claim.toLowerCase())) valid = false;\n}\nconst guardedClaims = [\n  ['xxl', 'xxxl'],\n  ['warranty', 'garantie', 'guarantee'],\n  ['discount', 'promotion', 'promo', 'remise'],\n  ['original', 'authentic', 'authentique'],\n  ['waterproof', 'etanche', 'étanche'],\n  ['black', 'white', 'red', 'blue', 'green', 'noir', 'blanc', 'rouge', 'bleu', 'vert'],\n  ['100% cotton', '100% coton'],\n];\nconst replyLower = reply.toLowerCase();\nfor (const terms of guardedClaims) {\n  if (terms.some((term) => replyLower.includes(term)) && !terms.some((term) => trustedText.includes(term))) valid = false;\n}\nif (!valid) return failure('grounding_validation_failed');\n\nreturn [{\n  json: {\n    ...base,\n    reply,\n    should_handoff: false,\n    response_source: 'cloudflare_ai',\n    ai_status: 'success',\n    last_bot_action: 'ANSWER_AI',\n    last_bot_question: null,\n  },\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2140,
-        -180
+        2620,
+        -100
       ],
       "id": "1a3d3a10-0045-4b11-8001-000000000045",
       "name": "Validate Cloudflare AI Reply"
     },
     {
       "parameters": {
-        "jsCode": "const state = $getWorkflowStaticData('global');\nstate.sessions = state.sessions || {};\nstate.processed_message_ids = state.processed_message_ids || {};\nconst phone = String($json.phone_number || '');\nconst messageId = String($json.message_id || '');\nconst existing = state.sessions[phone] || {};\nconst now = new Date().toISOString();\nconst primaryProductId = String($json.primary_product_id || '');\nconst previousProductId = String(existing.last_product_id || '');\nconst requestedColor = ['Black', 'White'].includes($json.requested_color) ? $json.requested_color : null;\nconst productChanged = Boolean(primaryProductId && previousProductId && primaryProductId !== previousProductId);\nconst preferredLanguage = ['darija', 'arabic', 'french', 'english'].includes($json.preferred_language || $json.language)\n  ? ($json.preferred_language || $json.language)\n  : (existing.preferred_language || existing.language || 'unknown');\nconst handoffActive = Boolean(existing.human_handoff || existing.handoff_status === 'active' || $json.should_handoff);\n\nstate.sessions[phone] = {\n  preferred_language: preferredLanguage,\n  language: preferredLanguage,\n  last_intent: $json.intent || existing.last_intent || 'UNKNOWN_STORE_QUERY',\n  last_product_id: primaryProductId || existing.last_product_id || null,\n  last_product_at: primaryProductId ? now : (existing.last_product_at || null),\n  last_requested_color: requestedColor || (productChanged ? null : (existing.last_requested_color || null)),\n  handoff_status: handoffActive ? 'active' : 'none',\n  last_activity_at: now,\n  last_seen: now,\n  human_handoff: handoffActive,\n};\nif (messageId) {\n  state.processed_message_ids[messageId] = {\n    ...(state.processed_message_ids[messageId] || {}),\n    processed_at: Date.now(),\n    phone_number: phone,\n    status: $json.should_handoff ? 'human_handoff' : 'reply_prepared',\n    response_source: $json.response_source || 'deterministic',\n  };\n}\n\nreturn [{\n  json: {\n    ...$json,\n    human_handoff: state.sessions[phone].human_handoff,\n    conversation_saved: true,\n  },\n}];"
+        "jsCode": "const fs = require('fs');\nconst crypto = require('crypto');\nconst state = $getWorkflowStaticData('global');\nstate.sessions = state.sessions || {};\nstate.processed_message_ids = state.processed_message_ids || {};\nconst phone = String($json.phone_number || '');\nconst messageId = String($json.message_id || '');\nconst storePath = String($env.ORDER_STORE_PATH || '/home/node/.n8n/whatsapp-orders.json');\nconst now = new Date().toISOString();\nconst eventAt = Number($json.state_event_at || Date.now());\n\nfunction safeRead(path) {\n  if (!fs.existsSync(path)) return { version: 1, orders: {}, active_orders_by_customer: {}, processed_order_messages: {}, notifications: {}, conversations: {} };\n  const value = JSON.parse(fs.readFileSync(path, 'utf8'));\n  value.orders ||= {}; value.active_orders_by_customer ||= {}; value.processed_order_messages ||= {}; value.notifications ||= {}; value.conversations ||= {};\n  return value;\n}\nasync function withStore(path, callback) {\n  const separator = path.lastIndexOf('/');\n  const directory = separator > 0 ? path.slice(0, separator) : '.';\n  fs.mkdirSync(directory, { recursive: true });\n  const lockPath = path + '.lock';\n  let descriptor = null;\n  for (let attempt = 0; attempt < 80; attempt += 1) {\n    try { descriptor = fs.openSync(lockPath, 'wx', 0o600); break; }\n    catch (error) {\n      if (error.code !== 'EEXIST') throw error;\n      try { if (Date.now() - fs.statSync(lockPath).mtimeMs > 30000) fs.unlinkSync(lockPath); } catch (_) {}\n      await new Promise((resolve) => setTimeout(resolve, 25));\n    }\n  }\n  if (descriptor === null) throw new Error('conversation_store_lock_timeout');\n  try {\n    const store = safeRead(path);\n    const result = await callback(store);\n    const temporary = path + '.tmp-' + crypto.randomBytes(8).toString('hex');\n    fs.writeFileSync(temporary, JSON.stringify(store, null, 2) + '\\n', { encoding: 'utf8', mode: 0o600 });\n    fs.renameSync(temporary, path);\n    return result;\n  } finally {\n    try { fs.closeSync(descriptor); } catch (_) {}\n    try { fs.unlinkSync(lockPath); } catch (_) {}\n  }\n}\n\nconst savedConversation = await withStore(storePath, async (store) => {\n  const existing = store.conversations[phone] || state.sessions[phone] || {};\n  if (eventAt < Number(existing.last_event_at || 0)) return existing;\n  const primaryProductId = String($json.primary_product_id || '');\n  const previousProductId = String(existing.last_product_id || '');\n  const requestedColor = ['Black', 'White'].includes($json.requested_color) ? $json.requested_color : null;\n  const productChanged = Boolean(primaryProductId && previousProductId && primaryProductId !== previousProductId);\n  const preferredLanguage = ['darija', 'arabic', 'french', 'english'].includes($json.preferred_language || $json.language)\n    ? ($json.preferred_language || $json.language)\n    : (existing.preferred_language || existing.language || 'unknown');\n  const handoffActive = Boolean(existing.human_handoff || existing.handoff_status === 'active' || $json.should_handoff);\n  const configuredHandoffMinutes = Number($env.HUMAN_TAKEOVER_MINUTES || 60);\n  const handoffMinutes = Number.isFinite(configuredHandoffMinutes) ? Math.min(1440, Math.max(5, Math.floor(configuredHandoffMinutes))) : 60;\n  const handoffUntil = handoffActive\n    ? ($json.should_handoff ? new Date(Date.now() + handoffMinutes * 60 * 1000).toISOString() : (existing.handoff_until || null))\n    : null;\n  const terminalOrder = ['CONFIRMED', 'OWNER_NOTIFIED', 'CANCELLED', 'ABANDONED'].includes($json.order_status);\n  const activeOrderId = terminalOrder ? null : ($json.active_order_id || existing.active_order_id || null);\n  const pendingPresent = Object.prototype.hasOwnProperty.call($json, 'pending_field');\n  const next = {\n    ...existing,\n    preferred_language: preferredLanguage,\n    language: preferredLanguage,\n    conversation_mode: activeOrderId ? 'ORDER' : ($json.conversation_mode || existing.conversation_mode || 'FAQ'),\n    last_intent: $json.intent || existing.last_intent || 'UNKNOWN_STORE_QUERY',\n    last_product_id: primaryProductId || existing.last_product_id || null,\n    last_product_at: primaryProductId ? now : (existing.last_product_at || null),\n    last_requested_color: requestedColor || (productChanged ? null : (existing.last_requested_color || null)),\n    active_order_id: activeOrderId,\n    order_status: $json.order_status || existing.order_status || 'NONE',\n    pending_action: pendingPresent ? ($json.pending_action || null) : (existing.pending_action || null),\n    pending_field: pendingPresent ? ($json.pending_field || null) : (existing.pending_field || null),\n    pending_fields: pendingPresent ? (Array.isArray($json.pending_fields) ? $json.pending_fields : []) : (existing.pending_fields || []),\n    pending_product_id: pendingPresent ? ($json.pending_product_id || null) : (existing.pending_product_id || null),\n    pending_order_id: pendingPresent ? ($json.pending_order_id || null) : (existing.pending_order_id || null),\n    last_bot_action: $json.last_bot_action || (pendingPresent ? null : existing.last_bot_action) || ('ANSWER_' + String($json.intent || 'UNKNOWN')),\n    last_bot_question: $json.last_bot_question || (pendingPresent ? null : existing.last_bot_question) || null,\n    handoff_status: handoffActive ? 'active' : 'none',\n    handoff_until: handoffUntil,\n    automation_enabled: !handoffActive,\n    last_activity_at: now,\n    last_seen: now,\n    updated_at: now,\n    last_event_at: eventAt,\n    human_handoff: handoffActive,\n  };\n  store.conversations[phone] = next;\n  return next;\n});\n\nstate.sessions[phone] = { ...savedConversation };\nif (messageId) {\n  state.processed_message_ids[messageId] = {\n    ...(state.processed_message_ids[messageId] || {}),\n    processed_at: Date.now(), phone_number: phone,\n    status: $json.should_handoff ? 'human_handoff' : 'reply_prepared',\n    response_source: $json.response_source || 'deterministic',\n  };\n}\n\nreturn [{ json: {\n  ...$json,\n  human_handoff: savedConversation.human_handoff,\n  conversation_saved: true,\n  state_saved: true,\n  next_pending_field: savedConversation.pending_field || null,\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2380,
-        -60
+        2860,
+        40
       ],
       "id": "1a3d3a10-0030-4b11-8001-000000000030",
       "name": "Save Conversation and Handoff State"
@@ -474,8 +741,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2620,
-        -60
+        3100,
+        -20
       ],
       "id": "1a3d3a10-0011-4b11-8001-000000000011",
       "name": "Build WhatsApp Request"
@@ -508,11 +775,274 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2860,
-        -60
+        3340,
+        -20
       ],
       "id": "1a3d3a10-0012-4b11-8001-000000000012",
       "name": "Send WhatsApp Reply"
+    },
+    {
+      "parameters": {
+        "jsCode": "const base = $('Save Conversation and Handoff State').first().json;\nconst response = $json || {};\nreturn [{ json: {\n  ...base,\n  customer_reply_sent: Boolean(response.messages?.[0]?.id),\n  customer_reply_message_id: response.messages?.[0]?.id ? String(response.messages[0].id).slice(0, 200) : null,\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3580,
+        -20
+      ],
+      "id": "1a3d3a10-0073-4b11-8001-000000000073",
+      "name": "Continue After Customer Reply"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "boolean-condition",
+              "leftValue": "={{ $json.owner_notification_required }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3820,
+        160
+      ],
+      "id": "1a3d3a10-0062-4b11-8001-000000000062",
+      "name": "Owner Notification Required?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst crypto = require('crypto');\nfunction digits(value) { return String(value || '').replace(/\\D/g, ''); }\nasync function withStore(path, callback) {\n  const separator = path.lastIndexOf('/');\n  fs.mkdirSync(separator > 0 ? path.slice(0, separator) : '.', { recursive: true });\n  const lockPath = path + '.lock'; let descriptor = null;\n  for (let attempt = 0; attempt < 80; attempt += 1) {\n    try { descriptor = fs.openSync(lockPath, 'wx', 0o600); break; }\n    catch (error) {\n      if (error.code !== 'EEXIST') throw error;\n      try { if (Date.now() - fs.statSync(lockPath).mtimeMs > 30000) fs.unlinkSync(lockPath); } catch (_) {}\n      await new Promise((resolve) => setTimeout(resolve, 25));\n    }\n  }\n  if (descriptor === null) throw new Error('order_store_lock_timeout');\n  try {\n    const store = fs.existsSync(path) ? JSON.parse(fs.readFileSync(path, 'utf8')) : { version: 1, orders: {}, notifications: {} };\n    store.orders ||= {}; store.notifications ||= {};\n    const result = await callback(store);\n    const temporary = path + '.tmp-' + crypto.randomBytes(8).toString('hex');\n    fs.writeFileSync(temporary, JSON.stringify(store, null, 2) + '\\n', { encoding: 'utf8', mode: 0o600 });\n    fs.renameSync(temporary, path);\n    return result;\n  } finally { try { fs.closeSync(descriptor); } catch (_) {} try { fs.unlinkSync(lockPath); } catch (_) {} }\n}\nconst owner = digits($env.STORE_OWNER_WHATSAPP);\nconst business = digits($env.WHATSAPP_BUSINESS_PHONE);\nconst configurationValid = /^212[5-7]\\d{8}$/.test(owner) && /^212[5-7]\\d{8}$/.test(business) && owner !== business;\nconst path = String($env.ORDER_STORE_PATH || '/home/node/.n8n/whatsapp-orders.json');\nconst key = String($json.owner_notification_key || '');\nconst kind = String($json.owner_notification_kind || 'order');\nconst reserved = await withStore(path, async (store) => {\n  const record = kind === 'order' ? store.orders[key] : store.notifications[key];\n  if (!record) return { send: false, status: 'MISSING_RECORD', reason: 'notification_record_missing' };\n  if (!configurationValid) {\n    record.notification_status = 'FAILED'; record.notification_error = 'owner_configuration_invalid_or_self_target'; record.updated_at = new Date().toISOString();\n    return { send: false, status: 'FAILED', reason: record.notification_error };\n  }\n  const status = kind === 'order' ? record.notification_status : record.status;\n  const attempts = Number(kind === 'order' ? record.notification_attempts : record.attempts || 0);\n  if (!['PENDING', 'FAILED'].includes(status) || attempts >= 2) return { send: false, status, reason: 'already_reserved_notified_or_retry_exhausted' };\n  if (kind === 'order') {\n    record.notification_status = 'SENDING'; record.notification_attempts = attempts + 1; record.notification_last_attempt_at = new Date().toISOString(); record.notification_error = null;\n  } else {\n    record.status = 'SENDING'; record.attempts = attempts + 1; record.last_attempt_at = new Date().toISOString(); record.error = null;\n  }\n  return { send: true, status: 'SENDING', attempts: attempts + 1 };\n});\nif (!reserved.send) console.error('[owner-notification]', JSON.stringify({ key, kind, status: reserved.status, reason: reserved.reason }));\nreturn [{ json: {\n  ...$json,\n  owner_notification_send: reserved.send,\n  owner_notification_status: reserved.status,\n  owner_notification_attempts: reserved.attempts || null,\n  owner_recipient: owner,\n  owner_configuration_valid: configurationValid,\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3340,
+        160
+      ],
+      "id": "1a3d3a10-0063-4b11-8001-000000000063",
+      "name": "Reserve Owner Notification"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "boolean-condition",
+              "leftValue": "={{ $json.owner_notification_send }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3580,
+        160
+      ],
+      "id": "1a3d3a10-0064-4b11-8001-000000000064",
+      "name": "Owner Notification Reserved?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const graphVersion = String($env.WHATSAPP_GRAPH_VERSION || 'v23.0');\nconst phoneNumberId = String($env.WHATSAPP_PHONE_NUMBER_ID || '');\nreturn [{ json: {\n  ...$json,\n  owner_send_url: 'https://graph.facebook.com/' + graphVersion + '/' + phoneNumberId + '/messages',\n  owner_send_body: {\n    messaging_product: 'whatsapp', recipient_type: 'individual', to: $json.owner_recipient,\n    type: 'text', text: { preview_url: false, body: String($json.owner_notification_text || '').slice(0, 4000) },\n  },\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3820,
+        100
+      ],
+      "id": "1a3d3a10-0065-4b11-8001-000000000065",
+      "name": "Build Owner Notification"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.owner_send_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.WHATSAPP_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($json.owner_send_body) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4060,
+        100
+      ],
+      "id": "1a3d3a10-0066-4b11-8001-000000000066",
+      "name": "Send Owner WhatsApp Notification",
+      "onError": "continueRegularOutput",
+      "retryOnFail": false,
+      "maxTries": 1
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst crypto = require('crypto');\nconst base = $('Reserve Owner Notification').first().json;\nconst response = $json || {};\nconst success = Boolean(response.messages?.[0]?.id) && !response.error;\nconst path = String($env.ORDER_STORE_PATH || '/home/node/.n8n/whatsapp-orders.json');\nconst lockPath = path + '.lock'; let descriptor = null;\nfor (let attempt = 0; attempt < 80; attempt += 1) {\n  try { descriptor = fs.openSync(lockPath, 'wx', 0o600); break; }\n  catch (error) {\n    if (error.code !== 'EEXIST') throw error;\n    try { if (Date.now() - fs.statSync(lockPath).mtimeMs > 30000) fs.unlinkSync(lockPath); } catch (_) {}\n    await new Promise((resolve) => setTimeout(resolve, 25));\n  }\n}\nif (descriptor === null) throw new Error('order_store_lock_timeout');\nlet finalStatus = success ? 'OWNER_NOTIFIED' : 'FAILED';\ntry {\n  const store = fs.existsSync(path) ? JSON.parse(fs.readFileSync(path, 'utf8')) : { orders: {}, notifications: {} };\n  const key = String(base.owner_notification_key || '');\n  const kind = String(base.owner_notification_kind || 'order');\n  const record = kind === 'order' ? store.orders?.[key] : store.notifications?.[key];\n  if (record) {\n    if (kind === 'order') {\n      if (success) {\n        if (record.status !== 'CONFIRMED') throw new Error('illegal_order_transition_' + record.status + '_to_OWNER_NOTIFIED');\n        record.status = 'OWNER_NOTIFIED'; record.notification_status = 'SENT'; record.owner_notified_at = new Date().toISOString(); record.owner_message_id = String(response.messages[0].id).slice(0, 200); record.notification_error = null;\n      } else {\n        record.status = 'CONFIRMED'; record.notification_status = 'FAILED'; record.notification_error = 'meta_owner_notification_failed'; record.updated_at = new Date().toISOString();\n      }\n    } else {\n      record.status = success ? 'SENT' : 'FAILED'; record.sent_at = success ? new Date().toISOString() : null; record.error = success ? null : 'meta_owner_notification_failed';\n    }\n  }\n  const temporary = path + '.tmp-' + crypto.randomBytes(8).toString('hex');\n  fs.writeFileSync(temporary, JSON.stringify(store, null, 2) + '\\n', { encoding: 'utf8', mode: 0o600 });\n  fs.renameSync(temporary, path);\n} finally { try { fs.closeSync(descriptor); } catch (_) {} try { fs.unlinkSync(lockPath); } catch (_) {} }\nconsole.log('[owner-notification]', JSON.stringify({ key: base.owner_notification_key, kind: base.owner_notification_kind, status: finalStatus, attempts: base.owner_notification_attempts }));\nreturn [{ json: { ...base, owner_notification_status: finalStatus, owner_notification_succeeded: success } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4300,
+        100
+      ],
+      "id": "1a3d3a10-0067-4b11-8001-000000000067",
+      "name": "Mark Owner Notification Result"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3820,
+        220
+      ],
+      "id": "1a3d3a10-0068-4b11-8001-000000000068",
+      "name": "Owner Notification Skipped"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "boolean-condition",
+              "leftValue": "={{ Array.isArray($json.configured_product_media) && $json.configured_product_media.length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3100,
+        320
+      ],
+      "id": "1a3d3a10-0069-4b11-8001-000000000069",
+      "name": "Configured Product Media?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const graphVersion = String($env.WHATSAPP_GRAPH_VERSION || 'v23.0');\nconst phoneNumberId = String($env.WHATSAPP_PHONE_NUMBER_ID || $json.phone_number_id || '');\nconst images = Array.isArray($json.configured_product_media) ? $json.configured_product_media.slice(0, 10) : [];\nreturn images.map((link) => ({ json: {\n  ...$json,\n  media_send_url: 'https://graph.facebook.com/' + graphVersion + '/' + phoneNumberId + '/messages',\n  media_send_body: {\n    messaging_product: 'whatsapp', recipient_type: 'individual', to: $json.phone_number,\n    type: 'image', image: { link },\n  },\n} }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3340,
+        300
+      ],
+      "id": "1a3d3a10-0070-4b11-8001-000000000070",
+      "name": "Build Product Media Requests"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.media_send_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.WHATSAPP_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($json.media_send_body) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3580,
+        300
+      ],
+      "id": "1a3d3a10-0071-4b11-8001-000000000071",
+      "name": "Send Configured Product Photo",
+      "onError": "continueRegularOutput",
+      "retryOnFail": false,
+      "maxTries": 1
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3340,
+        400
+      ],
+      "id": "1a3d3a10-0072-4b11-8001-000000000072",
+      "name": "No Configured Product Media"
     },
     {
       "parameters": {},
@@ -588,6 +1118,105 @@
         [
           {
             "node": "Return Handoff Admin Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Handoff Admin Webhook": {
+      "main": [
+        [
+          {
+            "node": "Authorize and Start Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorize and Start Handoff": {
+      "main": [
+        [
+          {
+            "node": "Return Start Handoff Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Orders Admin Webhook": {
+      "main": [
+        [
+          {
+            "node": "Authorize and Inspect Orders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorize and Inspect Orders": {
+      "main": [
+        [
+          {
+            "node": "Return Orders Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Owner Notification Webhook": {
+      "main": [
+        [
+          {
+            "node": "Authorize Notification Retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorize Notification Retry": {
+      "main": [
+        [
+          {
+            "node": "Return Notification Retry Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return Notification Retry Result": {
+      "main": [
+        [
+          {
+            "node": "Owner Notification Required?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reset Conversation Admin Webhook": {
+      "main": [
+        [
+          {
+            "node": "Authorize and Reset Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorize and Reset Conversation": {
+      "main": [
+        [
+          {
+            "node": "Return Reset Conversation Result",
             "type": "main",
             "index": 0
           }
@@ -707,6 +1336,35 @@
       "main": [
         [
           {
+            "node": "Order Sales State Machine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order Sales State Machine": {
+      "main": [
+        [
+          {
+            "node": "Order Handled?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order Handled?": {
+      "main": [
+        [
+          {
+            "node": "Save Conversation and Handoff State",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Deterministic Security and Sales Router",
             "type": "main",
             "index": 0
@@ -810,6 +1468,131 @@
         [
           {
             "node": "Send WhatsApp Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send WhatsApp Reply": {
+      "main": [
+        [
+          {
+            "node": "Continue After Customer Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continue After Customer Reply": {
+      "main": [
+        [
+          {
+            "node": "Owner Notification Required?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Configured Product Media?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Owner Notification Required?": {
+      "main": [
+        [
+          {
+            "node": "Reserve Owner Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Owner Notification Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reserve Owner Notification": {
+      "main": [
+        [
+          {
+            "node": "Owner Notification Reserved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Owner Notification Reserved?": {
+      "main": [
+        [
+          {
+            "node": "Build Owner Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Owner Notification Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Owner Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Owner WhatsApp Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Owner WhatsApp Notification": {
+      "main": [
+        [
+          {
+            "node": "Mark Owner Notification Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configured Product Media?": {
+      "main": [
+        [
+          {
+            "node": "Build Product Media Requests",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Configured Product Media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Product Media Requests": {
+      "main": [
+        [
+          {
+            "node": "Send Configured Product Photo",
             "type": "main",
             "index": 0
           }

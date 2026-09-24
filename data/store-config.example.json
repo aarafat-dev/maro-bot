@@ -11,10 +11,17 @@
     "price_mad": 0,
     "to_customer_door": true,
     "description": "Free delivery to customer's door.",
-    "estimated_days": null
+    "estimated_days": null,
+    "estimated_time": null
+  },
+  "orders": {
+    "required_fields": ["product", "quantity", "sizes", "colors", "customer_name", "phone", "city", "address"],
+    "phone_source": "customer_provided_preferred",
+    "allow_whatsapp_phone_fallback": true,
+    "address_required": true
   },
   "opening_hours": null,
-  "human_support_number": "+212600000000",
+  "human_support_number": null,
   "reply_max_characters": 700,
   "handoff_messages": {
     "darija": "هاد المعلومة خاص المسؤول يأكدها ليك. غادي نخلي ليه طلبك باش يجاوبك.",

@@ -8,7 +8,9 @@
     "build:workflows": "node scripts/build-workflows.mjs",
     "test:structure": "node tests/validate.mjs",
     "test:scenarios": "node tests/run-scenarios.mjs",
-    "test": "npm run build:workflows && npm run test:structure && npm run test:scenarios"
+    "test:orders": "node tests/run-order-scenarios.mjs",
+    "test:context": "node tests/run-context-regressions.mjs",
+    "test": "npm run build:workflows && npm run test:structure && npm run test:scenarios && npm run test:orders && npm run test:context"
   },
   "engines": {
     "node": ">=20"

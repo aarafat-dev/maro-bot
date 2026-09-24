@@ -7,6 +7,13 @@ The committed workflow JSON contains no credential objects or secret values. Run
 - `WHATSAPP_VERIFY_TOKEN`
 - `WHATSAPP_APP_SECRET`
 - `HANDOFF_ADMIN_TOKEN`
+- `STORE_OWNER_WHATSAPP` (the separate owner/admin recipient, never the business sender number)
+- `WHATSAPP_BUSINESS_PHONE` (used to reject accidental self-notification)
+- `HUMAN_TAKEOVER_MINUTES`
+- `CONVERSATION_CONTEXT_TTL_MINUTES`
+- `ORDER_DRAFT_TTL_MINUTES`
+- `ORDER_PHONE_SOURCE`
+- `ORDER_STORE_PATH`
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_AI_MODEL`
@@ -21,7 +28,7 @@ Create separate Header Auth credentials so provider tokens are encrypted by n8n 
 1. Create a Cloudflare Header Auth credential with header `Authorization` and value `Bearer CLOUDFLARE_API_TOKEN_VALUE`.
 2. Assign it only to `Call Cloudflare Workers AI` and remove that node's manual Authorization header.
 3. Create a separate Meta Header Auth credential with header `Authorization` and value `Bearer META_TOKEN_VALUE`.
-4. Assign it to `Send WhatsApp Reply` and `Send WhatsApp Error Fallback`; remove their manual Authorization headers.
+4. Assign it to `Send WhatsApp Reply`, `Send Owner WhatsApp Notification`, `Send Configured Product Photo`, and `Send WhatsApp Error Fallback`; remove their manual Authorization headers.
 5. After controlled tests succeed, remove `CLOUDFLARE_API_TOKEN` and `WHATSAPP_ACCESS_TOKEN` from the container environment if no remaining expression requires them.
 
 The account ID, model, phone-number ID, verify token, App Secret, and handoff token remain runtime settings for Code/webhook nodes. Keep secrets in a protected deployment environment or secret manager.

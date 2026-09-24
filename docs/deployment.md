@@ -16,6 +16,13 @@ N8N_EDITOR_BASE_URL=https://automation.client-domain.example
 WEBHOOK_URL=https://bot.client-domain.example/
 N8N_SECURE_COOKIE=true
 VERIFY_META_SIGNATURE=true
+WHATSAPP_BUSINESS_PHONE=CLIENT_BUSINESS_SENDER_E164
+STORE_OWNER_WHATSAPP=SEPARATE_OWNER_RECIPIENT_E164
+HUMAN_TAKEOVER_MINUTES=60
+CONVERSATION_CONTEXT_TTL_MINUTES=1440
+ORDER_DRAFT_TTL_MINUTES=1440
+ORDER_PHONE_SOURCE=customer_provided_preferred
+ORDER_STORE_PATH=/home/node/.n8n/whatsapp-orders.json
 CLOUDFLARE_ACCOUNT_ID=YOUR_ACCOUNT_ID
 CLOUDFLARE_API_TOKEN=YOUR_SECRET_TOKEN
 CLOUDFLARE_AI_MODEL=@cf/meta/llama-3.1-8b-instruct-fp8
@@ -23,6 +30,8 @@ CLOUDFLARE_AI_MODEL=@cf/meta/llama-3.1-8b-instruct-fp8
 
 Use separate random values for `N8N_ENCRYPTION_KEY`, `WHATSAPP_VERIFY_TOKEN`, and `HANDOFF_ADMIN_TOKEN`. The Meta App Secret is not the verify token.
 Store the Cloudflare token in the deployment secret store or an encrypted n8n credential; the placeholder above is illustrative only.
+
+Do not use an accountless `trycloudflare.com` Quick Tunnel for client production. Use a named Cloudflare Tunnel or another managed HTTPS reverse proxy with a stable hostname.
 
 ## Reverse-proxy requirements
 
@@ -41,12 +50,14 @@ The workflow immediately returns `EVENT_RECEIVED`, then continues processing, re
 - [ ] `.env` contains no placeholders.
 - [ ] `N8N_ENCRYPTION_KEY` is backed up in a secure secret manager.
 - [ ] Live product, FAQ, and config files are client-approved.
+- [ ] Every advertised product is present with confirmed name, price, sizes, colors, and policies; missing products are not invented.
 - [ ] Container data directory is mounted read-only.
 - [ ] n8n owner account and editor network controls are enabled.
 - [ ] Public callback resolves over HTTPS.
 - [ ] Meta callback verification succeeds.
 - [ ] `messages` is subscribed.
 - [ ] HMAC verification is enabled and tested.
+- [ ] Admin webhook paths are restricted at the reverse proxy/Cloudflare layer and protected by a unique `HANDOFF_ADMIN_TOKEN`.
 - [ ] Long-lived Meta token works with the production Phone Number ID.
 - [ ] Cloudflare account/model work and the token is scoped only to Workers AI on the intended account.
 - [ ] A deterministic message shows `response_source=deterministic` and makes no Workers AI request.
@@ -57,6 +68,8 @@ The workflow immediately returns `EVENT_RECEIVED`, then continues processing, re
 - [ ] `npm test` passes from the deployed revision.
 - [ ] Live Darija, French, product, missing-product, human, and injection tests pass.
 - [ ] Staff know how to see escalations and clear locks.
+- [ ] `WHATSAPP_BUSINESS_PHONE` and `STORE_OWNER_WHATSAPP` are different numbers and one owner-alert test succeeds exactly once.
+- [ ] Draft expiration and the protected per-customer reset procedure are understood by support staff.
 - [ ] Volume backup and restore have been tested.
 
 ## Client onboarding checklist

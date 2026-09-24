@@ -8,10 +8,12 @@ flowchart TD
     W --> ACK[Immediate 200 acknowledgment]
     ACK --> V[Shape + phone ID + optional HMAC]
     V --> N[Normalize and cap input]
-    N --> D[Session + message ID deduplication]
+    N --> D[Load durable context + message ID deduplication]
     D -->|duplicate or handoff active| STOP[Stop automation]
     D --> DATA[Read-only store JSON]
-    DATA --> R[Deterministic security and sales router]
+    DATA --> O[Pending field + durable order state machine]
+    O -->|not order-related| R[Deterministic security and sales router]
+    O -->|order response| SAVE
     R -->|known fact / greeting / image / rejected| SAVE[Save structured state]
     R -->|relevant unresolved only| B[Build minimal Workers AI request]
     B --> CF[Cloudflare Workers AI REST API]
@@ -20,9 +22,12 @@ flowchart TD
     G -->|429 / 5xx / invalid| H[Safe reply + handoff]
     H --> SAVE
     SAVE --> SEND[Meta messages endpoint]
+    SAVE -->|confirmed order / human request| OWNER[Idempotent owner notification]
 ```
 
 The GET verification webhook and protected clear-handoff webhook remain separate branches in the main workflow. Unexpected failures use the separate error-trigger workflow.
+
+Orders are written atomically inside the existing persistent n8n volume. Store facts remain read-only and authoritative; order records and customer PII never enter Cloudflare context. See `docs/orders.md` for transitions, persistence, owner notification, takeover, and scaling boundaries.
 
 ## Trust boundaries
 
@@ -100,30 +105,38 @@ If `last_product_id` is current, the bot may ask whether the image question conc
 
 ## Persistence model
 
-Workflow static data stores:
+The durable JSON store at `ORDER_STORE_PATH` contains:
 
 ```text
-sessions[phone_number]
-  preferred_language
-  last_intent
-  last_product_id
-  last_product_at
-  last_requested_color
-  handoff_status
-  last_activity_at
-
-processed_message_ids[message_id]
-  received_at / processed_at
-  phone_number
-  status
-  response_source
+orders[order_id]
+active_orders_by_customer[wa_id]
+conversations[wa_id]
+processed_order_messages[message_id]
+notifications[notification_key]
 ```
 
-Product context is accepted for 24 hours, processed IDs expire after seven days, and inactive sessions expire after 90 days. The workflow does not keep or send an unbounded conversation transcript.
+Order and conversation mutations use a fixed operator-controlled path, an exclusive lock, a mode-`0600` temporary file, and same-directory atomic rename. Drafts expire according to `ORDER_DRAFT_TTL_MINUTES` and remain as historical `ABANDONED` records. Terminal orders are never kept as active editable drafts.
 
-Legacy compatibility fields (`language`, `last_seen`, and `human_handoff`) remain stored while the refined fields above are used for routing. Catalog presence and inventory are separate: `catalogued=true` means the product belongs to the store, while `stock_status=unknown` requires staff confirmation and must never be presented as live stock.
+Conversation records include:
 
-Static data is appropriate for one low-volume active workflow. It is not an atomic deduplication store for concurrent queue-mode workers. Before scaling, use a database uniqueness constraint on `(store_id, message_id)` and a bounded session record keyed by `(store_id, phone_number)`.
+```text
+preferred_language
+conversation_mode
+pending_action / pending_field / pending_fields
+pending_product_id / pending_order_id
+last_bot_action / last_bot_question
+last_intent
+last_product_id / last_product_at / last_requested_color
+active_order_id / order_status
+handoff_status / handoff_until / automation_enabled
+last_activity_at / updated_at
+```
+
+Product/FAQ context expires according to `CONVERSATION_CONTEXT_TTL_MINUTES`. Processed webhook IDs expire after seven days, and the static compatibility mirror prunes inactive sessions after 90 days. The workflow does not keep or send an unbounded conversation transcript.
+
+Workflow static data remains a compatibility mirror for the early duplicate/handoff guard. Legacy fields (`language`, `last_seen`, and `human_handoff`) remain stored while durable state drives pending questions and orders. Catalog presence and inventory are separate: `catalogued=true` means the product belongs to the store, while `stock_status=unknown` requires staff confirmation and must never be presented as live stock.
+
+The local locked store is appropriate for one low-volume n8n container. Do not use it with queue mode or multiple replicas. Before scaling, use a database uniqueness constraint on `(store_id, message_id)` and a bounded session record keyed by `(store_id, phone_number)`.
 
 ## Handoff and error behavior
 

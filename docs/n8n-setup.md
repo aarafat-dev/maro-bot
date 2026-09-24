@@ -65,15 +65,17 @@ For stronger separation, create two Header Auth credentials:
 
 Assign them to the corresponding Meta and Cloudflare HTTP nodes and remove the manual Authorization headers. See `n8n/credentials-notes.md`.
 
-## Static-data memory
+## Conversation and order persistence
 
-Workflow static data persists after successful production executions of an active workflow. It does not reliably persist during editor/manual testing. The main workflow keeps structured language/intent/product/handoff state and seven days of processed message IDs. Product context expires after 24 hours, and sessions inactive for 90 days are pruned.
+Conversation context and draft orders are stored in `ORDER_STORE_PATH` using a shared exclusive lock, temporary file, and atomic rename. Workflow static data remains a compatibility mirror and supplies the existing early duplicate/handoff guard, but pending questions and order context no longer depend on transient node variables or editor/manual execution persistence.
+
+Fresh FAQ/product context expires after `CONVERSATION_CONTEXT_TTL_MINUTES` (default 1,440 minutes). Draft orders expire independently after `ORDER_DRAFT_TTL_MINUTES` (default 1,440 minutes), become historical `ABANDONED` records, and are detached from the conversation. Back up `ORDER_STORE_PATH` with the volume. Protected inspection, reset, notification retry, and takeover commands are documented in `docs/orders.md`.
 
 Limitations:
 
-- concurrent executions can race;
+- one local lock serializes context/order patches for the current single n8n container;
 - queue-mode workers do not provide a robust atomic deduplication guarantee;
-- static data is stored with the workflow and is not a customer-service UI;
+- static compatibility data is stored with the workflow and is not a customer-service UI;
 - importing as a new workflow creates a new static-data scope and does not migrate prior handoff/context state;
 - one workflow should serve one store/client.
 
@@ -107,6 +109,7 @@ Expected Cloudflare 429/5xx, timeout, configuration, and output-validation failu
 4. Reassign the error workflow in main workflow settings.
 5. Confirm `Call Cloudflare Workers AI` uses the environment expression or a dedicated Header Auth credential.
 6. Run `npm test`, then one deterministic test execution and one controlled AI-routed comparison.
+7. Configure the separate owner recipient and business sender phone, then confirm one test order and verify exactly one owner alert.
 
 To preserve existing static sessions and handoff locks, update the existing workflow rather than activating a separate imported copy, or deliberately migrate that state first.
 

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
@@ -12,8 +12,12 @@ const webhookPayload = JSON.parse(readFileSync(resolve(root, 'samples/webhook-pa
 const require = createRequire(import.meta.url);
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const codeByName = new Map(workflow.nodes.filter((item) => item.type === 'n8n-nodes-base.code').map((item) => [item.name, item.parameters.jsCode]));
+const conversationStorePath = `/tmp/maro-bot-routing-tests-${process.pid}.json`;
+rmSync(conversationStorePath, { force: true });
+rmSync(`${conversationStorePath}.lock`, { force: true });
+const defaultEnv = { ORDER_STORE_PATH: conversationStorePath, CONVERSATION_CONTEXT_TTL_MINUTES: '1440' };
 
-async function runCode(name, json, { nodeData = {}, env = {}, staticData = {}, binary } = {}) {
+async function runCode(name, json, { nodeData = {}, env = defaultEnv, staticData = {}, binary } = {}) {
   const code = codeByName.get(name);
   assert.ok(code, `missing Code node: ${name}`);
   const inputItem = { json, ...(binary ? { binary } : {}) };
@@ -328,3 +332,5 @@ assert.equal(dedupState.sessions['212600000098'].handoff_status, 'none');
 
 for (const result of results) console.log(`TEST ${result.number}: PASS - ${result.name}`);
 console.log('Additional normalization, verification, duplicate, and handoff checks: PASS');
+rmSync(conversationStorePath, { force: true });
+rmSync(`${conversationStorePath}.lock`, { force: true });
